@@ -28,6 +28,12 @@ parameters:
           order:
             type: integer
             description: 1-indexed display order for the section.
+          title:
+            type: string
+            description: Optional custom section heading title (e.g. '## Post-Demerger Margin Sustainability').
+          instruction:
+            type: string
+            description: Optional custom editorial instruction detailing the analytical focus for this section.
         required:
           - key
           - include

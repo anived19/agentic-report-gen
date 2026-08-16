@@ -109,3 +109,49 @@ def test_finding_sort_order():
     assert sorted_findings[1].severity == AMLSeverity.ELEVATED
     assert sorted_findings[2].severity == AMLSeverity.NONE
     assert "Could not fetch" in sorted_findings[3].finding_summary
+
+
+def test_name_matches_precision():
+    # Multi-word entity matching
+    assert _name_matches("Tata Consultancy Services", "Tata Consultancy Services Limited") is True
+    # Should not match completely different company in same conglomerate if multi-word
+    assert _name_matches("Tata Consultancy Services", "Tata Motors Limited") is False
+    # Short single-word matching
+    assert _name_matches("Tata", "Tata Group") is True
+    # Should NOT match substring inside an unrelated word or long unrelated name
+    assert _name_matches("Tata", "Mohammad Tatayev Bin Ali Hassan") is False
+    assert _name_matches("Tata", "Al-Tatari Global Shipping Co") is False
+
+
+def test_url_cleaning_and_noise_filtering():
+    from tools.aml_tools import _clean_and_filter_url
+    # Broken asset URLs must be rejected
+    assert _clean_and_filter_url("https://example.com/image.jpg:max_bytes(150000)") is None
+    assert _clean_and_filter_url("https://example.com/banner.png") is None
+    assert _clean_and_filter_url("https://example.com/static/logo.svg") is None
+    assert _clean_and_filter_url("ftp://invalid-scheme.com") is None
+    
+    # Valid web news articles must be accepted and cleaned
+    valid_url = "https://www.reuters.com/business/finance/sebi-order-investigation-2026-08-16"
+    assert _clean_and_filter_url(valid_url) == valid_url
+    assert _clean_and_filter_url(valid_url + "')") == valid_url
+
+
+def test_screener_clean_status_on_failure(monkeypatch):
+    from tools.aml_tools import screen_opensanctions, screen_ofac_sdn, screen_world_bank_debarred
+    
+    # Force exceptions
+    def mock_fail(*args, **kwargs):
+        raise RuntimeError("Simulated connection timeout")
+    
+    monkeypatch.setattr("tools.aml_tools._cached_get", mock_fail)
+    
+    ofac_res = screen_ofac_sdn("Test Entity")
+    assert ofac_res.severity == AMLSeverity.NONE
+    assert "404" not in ofac_res.finding_summary
+    assert "RuntimeError" not in ofac_res.finding_summary
+
+    wb_res = screen_world_bank_debarred("Test Entity")
+    assert wb_res.severity == AMLSeverity.NONE
+    assert "RuntimeError" not in wb_res.finding_summary
+

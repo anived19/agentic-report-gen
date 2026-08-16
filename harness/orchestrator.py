@@ -104,6 +104,9 @@ def plan_report_format(*args, **kwargs) -> dict:
 def finalize_report(*args, **kwargs) -> dict:
     return {"status": "finalized"}
 
+def compute_custom_financial_metric(*args, **kwargs) -> dict:
+    return {"status": "computed"}
+
 
 class MasterOrchestrator:
     def __init__(
@@ -112,12 +115,14 @@ class MasterOrchestrator:
         initial_company_ref: Optional[str] = None,
         report_type: ReportType = ReportType.GENERAL,
         run_aml: bool = False,
+        editorial_goal: Optional[str] = None,
         interactive_fn: Optional[Callable[[str, list[str]], str]] = None,
     ):
         self.state = AgentState(
             user_query=user_query,
             company_reference=initial_company_ref,
             report_type=report_type,
+            editorial_goal=editorial_goal,
             run_aml=run_aml,
             telemetry=RunTelemetry(),
         )
@@ -125,13 +130,14 @@ class MasterOrchestrator:
         self.skills: dict[str, SkillBundle] = {}
         self._load_all_skills()
 
-        # Internal tracking
+        # Internal tracking & guardrails
         self.seen_urls: set[str] = set()
         self.seen_titles: set[str] = set()
         self.consecutive_empty_searches: int = 0
         self.search_queries_used: list[str] = []
         self.raw_search_contents: list[types.Content] = []
         self.cached_idempotent_calls: dict[str, Any] = {}
+        self.category_attempts: dict[str, int] = {}
 
     def _load_all_skills(self) -> None:
         skill_names = [
@@ -143,6 +149,7 @@ class MasterOrchestrator:
             "get_quarterly_financials",
             "get_technicals",
             "get_ownership",
+            "compute_custom_financial_metric",
             "search_web_news",
             "run_structured_aml_sweep",
             "search_adverse_media",
@@ -157,11 +164,24 @@ class MasterOrchestrator:
                 logger.warning("Could not load skill %s: %s", name, exc)
 
     def _execute_validate_data(self) -> ValidationResult:
-        """Deterministic validation of AgentState against orchestrator_config.yaml."""
+        """
+        Dynamic validation of AgentState sufficiency against editorial_goal and report_type.
+        Enforces category retry cap (Refinement #5): if a category was attempted >= 2 times
+        and returned unavailable data, it does NOT hard-block finalization.
+        """
         rt_key = self.state.report_type.value.upper()
         profile = _ORCHESTRATOR_CONFIG.get(rt_key, _ORCHESTRATOR_CONFIG.get("GENERAL", {}))
         required = profile.get("required", ["price_snapshot"])
         min_searches = profile.get("min_news_searches", 1)
+
+        goal_lower = (self.state.editorial_goal or self.state.user_query or "").lower()
+
+        # Dynamic adjustments based on editorial goal
+        if any(term in goal_lower for term in ("sentiment", "news", "mood", "catalyst", "headline")):
+            min_searches = max(min_searches, 1)
+        if any(term in goal_lower for term in ("valuation", "multiple", "intrinsic", "cheap", "fair value", "target")):
+            if "valuation_multiples" not in required:
+                required = list(required) + ["valuation_multiples"]
 
         missing = []
         md = self.state.market_data
@@ -176,16 +196,27 @@ class MasterOrchestrator:
         }
 
         for req in required:
+            # Check retry cap guardrail: if attempted >= 2 times, don't hard-block
+            attempts = self.category_attempts.get(f"get_{req}", self.category_attempts.get(req, 0))
+            if attempts >= 2:
+                continue
+
             keys = category_map.get(req, [req])
-            # Check if at least one signature key is present or if key exists in market_data
             if req == "quarterly_financials":
                 if not md.get("quarterly_financials"):
                     missing.append(req)
             elif not any(k in md for k in keys):
                 missing.append(req)
 
-        if len(self.search_queries_used) < min_searches and self.state.telemetry.tavily_calls < self.state.telemetry.tavily_calls_budget:
-            missing.append(f"news_searches (need at least {min_searches}, ran {len(self.search_queries_used)})")
+        # News searches validation with budget and attempt checks
+        news_attempts = len(self.search_queries_used)
+        if (
+            news_attempts < min_searches
+            and self.state.telemetry.tavily_calls < self.state.telemetry.tavily_calls_budget
+            and self.category_attempts.get("search_web_news", 0) < 2
+            and self.consecutive_empty_searches < 2
+        ):
+            missing.append(f"news_searches (need at least {min_searches}, ran {news_attempts})")
 
         satisfied = len(missing) == 0
         contradictions = []
@@ -202,11 +233,15 @@ class MasterOrchestrator:
             satisfied=satisfied,
             missing=missing,
             contradictions=contradictions,
-            notes="Validation complete against profile for " + rt_key,
+            notes=f"Validation complete against profile for {rt_key} (editorial goal: {self.state.editorial_goal or 'unspecified'})",
         )
 
     def _execute_plan_report_format(self, args: dict[str, Any]) -> ReportSpec:
-        """Process or auto-plan a ReportSpec for the Chief Editor."""
+        """
+        Process or auto-plan a ReportSpec for the Chief Editor.
+        Enforces maximum 5 to 7 sections total (Refinement #4) and dynamically tailors
+        the blueprint to the self-generated editorial_goal.
+        """
         rationale = args.get("rationale", "")
         raw_sections = args.get("sections", [])
         sections = []
@@ -218,10 +253,44 @@ class MasterOrchestrator:
                 except Exception:
                     pass
 
+        # Bounding sections: cap at maximum 7 active sections (Refinement #4)
+        if sections:
+            sections = sorted(sections, key=lambda x: x.order)[:7]
+
         if not sections:
-            # Generate default section spec based on report type
+            # Generate adaptive section spec based on editorial_goal & report_type
+            goal_lower = (self.state.editorial_goal or self.state.user_query or "").lower()
             rt = self.state.report_type
-            if rt == ReportType.SENTIMENT:
+
+            if any(term in goal_lower for term in ("sentiment", "news", "momentum", "macro", "catalyst")):
+                rationale = rationale or f"Sentiment & Catalyst focus: prioritizing market mood, headlines, and strategic risks for {self.state.editorial_goal or self.state.ticker}."
+                sections = [
+                    SectionSpec(key="executive_summary", include=True, order=1, emphasis="Highlight market sentiment, news catalysts, and near-term direction."),
+                    SectionSpec(key="sentiment_news", include=True, order=2, emphasis="Lead with detailed catalysts and cited headline risks."),
+                    SectionSpec(key="risk_factors", include=True, order=3, emphasis="Detail regulatory, competitive, and macro risks."),
+                    SectionSpec(key="scenario_outlook", include=True, order=4, emphasis="Frame Bull/Base/Bear scenarios from sentiment and catalyst outlook."),
+                ]
+            elif any(term in goal_lower for term in ("valuation", "multiple", "demerger", "discount", "fair value", "target")):
+                rationale = rationale or f"Valuation focus: prioritizing fundamental metrics, multiples, and intrinsic analyst targets for {self.state.editorial_goal or self.state.ticker}."
+                sections = [
+                    SectionSpec(key="executive_summary", include=True, order=1, emphasis="Focus on valuation summary and fair value vs market price."),
+                    SectionSpec(key="financial_highlights", include=True, order=2, emphasis="Lead with market cap, price, and moving average baseline."),
+                    SectionSpec(key="fundamentals_deep_dive", include=True, order=3, emphasis="Thorough analysis of EPS, ROE, ROCE, and quarterly growth."),
+                    SectionSpec(key="valuation_analysis", include=True, order=4, emphasis="Lead with P/E, forward P/E, EV/EBITDA, and margin metrics."),
+                    SectionSpec(key="scenario_outlook", include=True, order=5, emphasis="Frame outlook around fair value convergence scenarios."),
+                ]
+            elif rt == ReportType.EQUITY:
+                rationale = rationale or "Comprehensive equity analysis across valuation, technicals, and sentiment."
+                sections = [
+                    SectionSpec(key="executive_summary", include=True, order=1, emphasis="Comprehensive overview balancing valuation, momentum, and outlook."),
+                    SectionSpec(key="financial_highlights", include=True, order=2, emphasis="Baseline financial highlights and scale."),
+                    SectionSpec(key="fundamentals_deep_dive", include=True, order=3, emphasis="EPS, ROE, and quarterly financials deep dive."),
+                    SectionSpec(key="technicals", include=True, order=4, emphasis="RSI, MACD, and volume trend momentum analysis."),
+                    SectionSpec(key="valuation_analysis", include=True, order=5, emphasis="Valuation multiples comparison."),
+                    SectionSpec(key="sentiment_news", include=True, order=6, emphasis="Catalysts and risks summary."),
+                    SectionSpec(key="scenario_outlook", include=True, order=7, emphasis="Comprehensive Bull/Base/Bear scenario breakdown."),
+                ]
+            elif rt == ReportType.SENTIMENT:
                 rationale = rationale or "Sentiment focus: lead with momentum and news sentiment; market cap is secondary."
                 sections = [
                     SectionSpec(key="executive_summary", include=True, order=1, emphasis="Highlight market sentiment and near-term news catalysts."),
@@ -238,21 +307,8 @@ class MasterOrchestrator:
                     SectionSpec(key="valuation_analysis", include=True, order=4, emphasis="Lead with P/E, forward P/E, EV/EBITDA, and margin metrics."),
                     SectionSpec(key="scenario_outlook", include=True, order=5, emphasis="Frame outlook around fair value convergence scenarios."),
                 ]
-            elif rt == ReportType.EQUITY:
-                rationale = rationale or "Comprehensive equity analysis across valuation, technicals, and sentiment."
-                sections = [
-                    SectionSpec(key="executive_summary", include=True, order=1, emphasis="Comprehensive overview balancing valuation, momentum, and outlook."),
-                    SectionSpec(key="financial_highlights", include=True, order=2, emphasis="Baseline financial highlights and scale."),
-                    SectionSpec(key="fundamentals_deep_dive", include=True, order=3, emphasis="EPS, ROE, and quarterly financials deep dive."),
-                    SectionSpec(key="technicals", include=True, order=4, emphasis="RSI, MACD, and volume trend momentum analysis."),
-                    SectionSpec(key="holdings", include=True, order=5, emphasis="Institutional vs insider ownership structure."),
-                    SectionSpec(key="valuation_analysis", include=True, order=6, emphasis="Valuation multiples comparison."),
-                    SectionSpec(key="sentiment_news", include=True, order=7, emphasis="Catalysts and risks summary."),
-                    SectionSpec(key="risk_factors", include=True, order=8, emphasis="Downside risk factors."),
-                    SectionSpec(key="scenario_outlook", include=True, order=9, emphasis="Comprehensive Bull/Base/Bear scenario breakdown."),
-                ]
             else:
-                rationale = rationale or "General market overview."
+                rationale = rationale or f"Financial review for {self.state.editorial_goal or self.state.ticker}."
                 sections = [
                     SectionSpec(key="executive_summary", include=True, order=1, emphasis="Standard executive summary."),
                     SectionSpec(key="financial_highlights", include=True, order=2, emphasis="Financial highlights."),
@@ -261,7 +317,9 @@ class MasterOrchestrator:
                     SectionSpec(key="scenario_outlook", include=True, order=5, emphasis="Near-term outlook."),
                 ]
 
-        spec = ReportSpec(sections=sections, rationale=rationale)
+        # Enforce hard cap at 7 sections (Refinement #4)
+        sections = sections[:7]
+        spec = ReportSpec(sections=sections, rationale=rationale, editorial_goal=self.state.editorial_goal)
         self.state.report_spec = spec
         return spec
 
@@ -271,7 +329,10 @@ class MasterOrchestrator:
         - Idempotency caching
         - Tavily budget & diminishing returns checks
         - State updates
+        - Category attempt tracking
         """
+        self.category_attempts[tool_name] = self.category_attempts.get(tool_name, 0) + 1
+
         # Check idempotency
         idempotency_key = f"{tool_name}:{json.dumps(args, sort_keys=True)}"
         if idempotency_key in self.cached_idempotent_calls:
@@ -351,12 +412,36 @@ class MasterOrchestrator:
             res = skill.function(ticker)
             if isinstance(res, dict):
                 self.state.market_data.update(res)
-                if not self.state.company_name and res.get("company_name"):
+                if res.get("company_name"):
                     self.state.company_name = res.get("company_name")
             elif isinstance(res, list) and tool_name == "get_quarterly_financials":
                 self.state.market_data["quarterly_financials"] = res
 
             summary = f"Fetched {tool_name} for {ticker}"
+            self.cached_idempotent_calls[idempotency_key] = res
+            return res, summary, True, None
+
+        elif tool_name == "compute_custom_financial_metric":
+            expression = args.get("expression", "")
+            context = args.get("context")
+            ticker = args.get("ticker") or self.state.ticker
+            metric_name = args.get("metric_name")
+
+            from tools.finance_tools import compute_custom_financial_metric as calc_tool
+            res = calc_tool(
+                expression=expression,
+                context=context,
+                ticker=ticker,
+                metric_name=metric_name,
+            )
+
+            m_name = res.get("metric_name", "custom_metric")
+            self.state.custom_metrics[m_name] = res
+            if "custom_metrics" not in self.state.market_data:
+                self.state.market_data["custom_metrics"] = {}
+            self.state.market_data["custom_metrics"][m_name] = res
+
+            summary = f"Computed {m_name}: {res.get('formatted_value')} (status: {res.get('status')})"
             self.cached_idempotent_calls[idempotency_key] = res
             return res, summary, True, None
 
@@ -493,13 +578,15 @@ class MasterOrchestrator:
             f"User request: {self.state.user_query}\n"
             f"Detected Prior Company Reference: {self.state.company_reference or 'Unspecified'}\n"
             f"Detected Prior Report Type: {self.state.report_type.value}\n"
+            f"Editorial Goal / Framing: {self.state.editorial_goal or 'Standard Financial Assessment'}\n"
             f"AML Screening Enabled: {self.state.run_aml}\n\n"
             f"Instructions:\n"
             f"1. Begin by calling resolve_entity with the company/group reference.\n"
             f"2. If resolve_entity returns MORE THAN ONE candidate (e.g. for group names like 'Tata', 'Adani', 'Reliance', 'Mahindra', 'Bajaj'), you MUST immediately call ask_user. Do NOT guess a specific company.\n"
             f"3. Fetch required market data categories for the {self.state.report_type.value} report type.\n"
-            f"4. Run news and adverse media searches within the shared 5-call Tavily budget.\n"
-            f"5. Call validate_data(), then plan_report_format(), then finalize_report()."
+            f"4. If ad-hoc calculations (CAGR, FCF Yield, custom spreads, margins) are required to satisfy the editorial goal, call compute_custom_financial_metric.\n"
+            f"5. Run news and adverse media searches within the shared 5-call Tavily budget.\n"
+            f"6. Call validate_data(), then plan_report_format(), then finalize_report()."
         )
 
         contents: list[types.Content] = [
@@ -616,17 +703,20 @@ class MasterOrchestrator:
                         self.search_queries_used,
                     )
                 except Exception as exc:
-                    logger.warning("Sentiment findings extraction failed: %s — using neutral fallback", exc)
+                    logger.warning("Sentiment findings extraction failed: %s — recording honest failure state", exc)
+                    self.state.telemetry.extraction_failed = True
                     self.state.sentiment_findings = SentimentFindings(
                         overall_sentiment=SentimentLabel.NEUTRAL,
-                        sentiment_summary="Market sentiment analysis completed with neutral baseline.",
+                        sentiment_summary="Automated sentiment extraction did not complete successfully for this run; no catalysts or risks could be structured from search results.",
                         queries_used=self.search_queries_used,
+                        extraction_failed=True,
                     )
             else:
                 self.state.sentiment_findings = SentimentFindings(
                     overall_sentiment=SentimentLabel.NEUTRAL,
                     sentiment_summary="No external sentiment searches required for this technical/valuation run.",
                     queries_used=[],
+                    extraction_failed=False,
                 )
 
         # 3. Chief Editor synthesis
@@ -637,6 +727,8 @@ class MasterOrchestrator:
             sentiment_findings=self.state.sentiment_findings,
             report_type=self.state.report_type,
             report_spec=self.state.report_spec,
+            editorial_goal=self.state.editorial_goal,
+            aml_result=self.state.aml_result if self.state.run_aml else None,
         )
 
         # 4. If AML enabled and AML results exist, append deterministic table
@@ -644,16 +736,36 @@ class MasterOrchestrator:
             aml_md = render_aml_markdown(self.state.aml_result)
             markdown_body = markdown_body + "\n\n" + aml_md
 
+        # 5. Assemble KPI summary cards for adaptive document rendering
+        kpi_cards: list[dict[str, str]] = []
+        if market_metrics.current_price_formatted:
+            kpi_cards.append({"label": "Current Price", "value": market_metrics.current_price_formatted, "note": "Market close"})
+        if market_metrics.market_cap_formatted:
+            kpi_cards.append({"label": "Market Cap", "value": market_metrics.market_cap_formatted, "note": "Scale"})
+        if market_metrics.pe_ratio_formatted:
+            kpi_cards.append({"label": "P/E Ratio", "value": market_metrics.pe_ratio_formatted, "note": "TTM multiple"})
+        if market_metrics.roe_formatted:
+            kpi_cards.append({"label": "Return on Equity", "value": market_metrics.roe_formatted, "note": "Profitability"})
+        for cm_name, cm_val in self.state.custom_metrics.items():
+            if isinstance(cm_val, dict) and cm_val.get("formatted_value") and cm_val.get("status") == "ok":
+                kpi_cards.append({
+                    "label": cm_name.replace("_", " ").title(),
+                    "value": str(cm_val["formatted_value"]),
+                    "note": "Custom Sandbox Metric",
+                })
+
         final_report = FinalReport(
             ticker=ticker,
             company_name=self.state.company_name or market_metrics.company_name,
             report_type=self.state.report_type,
+            editorial_goal=self.state.editorial_goal,
             markdown_body=markdown_body,
             market_metrics=market_metrics,
             sentiment_findings=self.state.sentiment_findings,
             aml_result=self.state.aml_result,
             report_spec=self.state.report_spec,
             telemetry=self.state.telemetry,
+            kpi_cards=kpi_cards[:6],
         )
 
         self._dump_trace()
@@ -672,11 +784,13 @@ class MasterOrchestrator:
                 "ticker": self.state.ticker,
                 "company_name": self.state.company_name,
                 "report_type": self.state.report_type.value,
+                "editorial_goal": self.state.editorial_goal,
                 "run_aml": self.state.run_aml,
                 "status": self.state.status.value,
                 "turn": self.state.turn,
                 "telemetry": self.state.telemetry.model_dump(),
                 "report_spec": self.state.report_spec.model_dump() if self.state.report_spec else None,
+                "custom_metrics": self.state.custom_metrics,
                 "tool_log": [t.model_dump() for t in self.state.tool_log],
             }
             trace_path.write_text(json.dumps(trace_data, indent=2), encoding="utf-8")
@@ -690,6 +804,7 @@ def run_orchestrator(
     initial_company_ref: Optional[str] = None,
     report_type: ReportType = ReportType.GENERAL,
     run_aml: bool = False,
+    editorial_goal: Optional[str] = None,
     interactive_fn: Optional[Callable[[str, list[str]], str]] = None,
 ) -> tuple[AgentState, FinalReport]:
     """Convenience entry point for running the master orchestrator."""
@@ -698,6 +813,7 @@ def run_orchestrator(
         initial_company_ref=initial_company_ref,
         report_type=report_type,
         run_aml=run_aml,
+        editorial_goal=editorial_goal,
         interactive_fn=interactive_fn,
     )
     return orchestrator.run_loop()

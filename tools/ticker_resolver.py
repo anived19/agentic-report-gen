@@ -39,29 +39,29 @@ def _load_conglomerate_map() -> dict[str, list[dict[str, Any]]]:
 
 _CONGLOMERATE_MAP = _load_conglomerate_map()
 
-# Static map for unambiguous common names
-_STATIC_MAP: dict[str, str] = {
-    "reliance industries": "RELIANCE.NS",
-    "tata consultancy services": "TCS.NS",
-    "tcs": "TCS.NS",
-    "infosys": "INFY.NS",
-    "hdfc bank": "HDFCBANK.NS",
-    "icici bank": "ICICIBANK.NS",
-    "state bank of india": "SBIN.NS",
-    "sbi": "SBIN.NS",
-    "wipro": "WIPRO.NS",
-    "tata motors": "TMPV.NS",
-    "tata motors passenger vehicles": "TMPV.NS",
-    "tata motors commercial vehicles": "TMCV.NS",
-    "bharti airtel": "BHARTIARTL.NS",
-    "apple": "AAPL",
-    "microsoft": "MSFT",
-    "google": "GOOGL",
-    "alphabet": "GOOGL",
-    "amazon": "AMZN",
-    "tesla": "TSLA",
-    "nvidia": "NVDA",
-    "meta": "META",
+# Static map for unambiguous common names (maps normalized query to (ticker, display_name))
+_STATIC_MAP: dict[str, tuple[str, str]] = {
+    "reliance industries": ("RELIANCE.NS", "Reliance Industries"),
+    "tata consultancy services": ("TCS.NS", "Tata Consultancy Services"),
+    "tcs": ("TCS.NS", "Tata Consultancy Services"),
+    "infosys": ("INFY.NS", "Infosys"),
+    "hdfc bank": ("HDFCBANK.NS", "HDFC Bank"),
+    "icici bank": ("ICICIBANK.NS", "ICICI Bank"),
+    "state bank of india": ("SBIN.NS", "State Bank of India"),
+    "sbi": ("SBIN.NS", "State Bank of India"),
+    "wipro": ("WIPRO.NS", "Wipro"),
+    "tata motors": ("TMPV.NS", "Tata Motors Passenger Vehicles"),
+    "tata motors passenger vehicles": ("TMPV.NS", "Tata Motors Passenger Vehicles"),
+    "tata motors commercial vehicles": ("TMCV.NS", "Tata Motors Commercial Vehicles"),
+    "bharti airtel": ("BHARTIARTL.NS", "Bharti Airtel"),
+    "apple": ("AAPL", "Apple"),
+    "microsoft": ("MSFT", "Microsoft"),
+    "google": ("GOOGL", "Alphabet (Google)"),
+    "alphabet": ("GOOGL", "Alphabet"),
+    "amazon": ("AMZN", "Amazon"),
+    "tesla": ("TSLA", "Tesla"),
+    "nvidia": ("NVDA", "NVIDIA"),
+    "meta": ("META", "Meta"),
 }
 
 
@@ -109,12 +109,12 @@ def resolve_entity(query: str) -> list[dict[str, Any]]:
     cleaned = _clean_query(query)
 
     # 1. Check for specific known company names in static map first
-    for candidate_name, ticker in _STATIC_MAP.items():
+    for candidate_name, (ticker, display_name) in _STATIC_MAP.items():
         if candidate_name == raw_norm or candidate_name == cleaned:
             if _validate_ticker(ticker):
                 return [{
                     "ticker": ticker,
-                    "name": candidate_name.title(),
+                    "name": display_name,
                     "exchange": "NSE" if ticker.endswith(".NS") else "US",
                     "sector": "General",
                     "confidence": 1.0,

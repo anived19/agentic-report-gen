@@ -13,7 +13,7 @@ import argparse
 import logging
 import sys
 
-from harness.intake import detect_report_type, extract_company_reference
+from harness.intake import detect_report_type, extract_company_reference, extract_editorial_goal, extract_intake_priors
 from harness.orchestrator import run_orchestrator
 from tools.pdf_tools import compile_pdf
 
@@ -30,21 +30,28 @@ def generate_report(user_query: str, run_aml: bool = False) -> None:
         run_aml = True
         print("      Note: Natural language AML screening intent detected -> enabling Layer 2 compliance screening.")
 
-    print("[1/3] Identifying initial company reference and report type priors...")
+    print("[1/3] Identifying initial company reference, report type, and editorial goal...")
     try:
-        company_reference = extract_company_reference(user_query)
+        priors = extract_intake_priors(user_query)
+        company_reference = priors["company_reference"]
+        report_type = priors["report_type"]
+        editorial_goal = priors["editorial_goal"]
     except Exception as exc:
-        logger.warning("Intake company extraction fallback: %s", exc)
+        logger.warning("Intake extraction fallback: %s", exc)
         company_reference = None
+        report_type = detect_report_type(user_query)
+        editorial_goal = extract_editorial_goal(user_query)
 
-    report_type = detect_report_type(user_query)
-    print(f"      -> Prior entity: {company_reference or 'Unspecified'}  |  Prior report type: {report_type.value}")
+    print(f"      -> Prior entity: {company_reference or 'Unspecified'}  |  Report type: {report_type.value}")
+    if editorial_goal:
+        print(f"      -> Editorial goal: {editorial_goal}")
 
     print("[2/3] Executing master agentic orchestrator loop...")
     agent_state, report = run_orchestrator(
         user_query=user_query,
         initial_company_ref=company_reference,
         report_type=report_type,
+        editorial_goal=editorial_goal,
         run_aml=run_aml,
     )
 

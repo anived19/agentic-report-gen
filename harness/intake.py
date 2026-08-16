@@ -49,6 +49,19 @@ _REPORT_TYPE_SYSTEM_PROMPT = (
 )
 
 
+_EDITORIAL_GOAL_SYSTEM_PROMPT = (
+    "Extract a concise, professional financial research editorial goal or theme summarizing "
+    "the specific analytical intent of the user's request.\n"
+    "Examples:\n"
+    "  - 'Post-Demerger Valuation & Margin Sustainability Scan'\n"
+    "  - 'Comprehensive Equity Research & Technical Momentum'\n"
+    "  - 'News Sentiment, Catalysts & Downside Risk Brief'\n"
+    "  - 'Deep Fundamental Valuation & Fair Value Convergence Model'\n"
+    "  - 'Capital Structure & Ownership Concentration Analysis'\n\n"
+    "Respond with ONLY the short title string (under 10 words) — no explanation, no quotes."
+)
+
+
 def extract_company_reference(user_query: str) -> str:
     """Returns a plain-text company/ticker reference extracted from `user_query`."""
     client = genai.Client(api_key=settings.gemini_api_key)
@@ -66,9 +79,33 @@ def extract_company_reference(user_query: str) -> str:
     return reference
 
 
+def extract_editorial_goal(user_query: str) -> str:
+    """
+    Extract a dynamic analytical framing / editorial goal for the report.
+    E.g. 'Post-Demerger Valuation & Margin Sustainability Scan'.
+    """
+    client = genai.Client(api_key=settings.gemini_api_key)
+    try:
+        response = generate_with_retry(
+            client,
+            model=settings.gemini_model,
+            contents=[types.Content(role="user", parts=[types.Part(text=user_query)])],
+            config=types.GenerateContentConfig(system_instruction=_EDITORIAL_GOAL_SYSTEM_PROMPT),
+        )
+        goal = (response.text or "").strip().strip('"').strip("'")
+        if goal:
+            logger.info("Intake extracted editorial goal: %r", goal)
+            return goal
+    except Exception as exc:
+        logger.warning("Editorial goal extraction failed: %s — falling back to query-based framing", exc)
+
+    # Fallback to a clean sanitized version of the query
+    return f"Financial Intelligence Assessment: {user_query.strip()}"
+
+
 def detect_report_type(user_query: str) -> ReportType:
     """
-    Classify `user_query` into one of the four ReportType values.
+    Classify `user_query` into one of the ReportType values.
 
     Falls back to ReportType.GENERAL on any parse failure — a misclassification
     degrades report focus but never crashes the pipeline.
@@ -88,3 +125,20 @@ def detect_report_type(user_query: str) -> ReportType:
     except ValueError:
         logger.warning("Could not parse report type from %r — defaulting to GENERAL", raw)
         return ReportType.GENERAL
+
+
+def extract_intake_priors(user_query: str) -> tuple[Optional[str], ReportType, str]:
+    """
+    Convenience helper that extracts company reference, report type, and dynamic editorial goal.
+    """
+    try:
+        company_ref = extract_company_reference(user_query)
+    except Exception as exc:
+        logger.warning("Could not extract company reference: %s", exc)
+        company_ref = None
+
+    report_type = detect_report_type(user_query)
+    editorial_goal = extract_editorial_goal(user_query)
+
+    return company_ref, report_type, editorial_goal
+

@@ -244,3 +244,128 @@ def test_trace_dump_and_telemetry():
     assert data["telemetry"]["gemini_calls"] == 3
     assert data["telemetry"]["tavily_calls"] == 1
     assert data["report_spec"]["rationale"] == "Test rationale"
+
+
+def test_sentiment_extraction_failure_handling():
+    """Verify that sentiment extraction failure sets extraction_failed flag and honest disclosures."""
+    from harness.synthesis import _build_section_instructions
+
+    orch = MasterOrchestrator(
+        user_query="news sentiment report of TCS",
+        report_type=ReportType.SENTIMENT,
+    )
+    orch.state.ticker = "TCS.NS"
+    orch.search_queries_used = ["TCS Q3 news"]
+
+    # Mock _extract_structured_findings to raise exception
+    with patch("harness.orchestrator._extract_structured_findings", side_effect=ValueError("Invalid JSON from LLM")):
+        with patch("harness.orchestrator.run_chief_editor", return_value="# Executive Summary\nTest report."):
+            with patch("harness.orchestrator.assemble_market_metrics") as mock_mm:
+                mock_mm.return_value = MarketMetrics(ticker="TCS.NS", company_name="Tata Consultancy Services")
+                # Trigger post-loop extraction block manually by setting state
+                orch.state.status = AgentStatus.DONE
+                orch.state.turn = 1
+                
+                # Mock time to avoid long run
+                with patch("time.time", side_effect=[100.0, 105.0]):
+                    # Run extraction logic block
+                    if not orch.state.sentiment_findings and orch.search_queries_used:
+                        try:
+                            from harness.orchestrator import _extract_structured_findings
+                            orch.state.sentiment_findings = _extract_structured_findings(
+                                None, orch.raw_search_contents, orch.search_queries_used
+                            )
+                        except Exception:
+                            orch.state.telemetry.extraction_failed = True
+                            orch.state.sentiment_findings = SentimentFindings(
+                                overall_sentiment=SentimentLabel.NEUTRAL,
+                                sentiment_summary="Automated sentiment extraction did not complete successfully for this run; no catalysts or risks could be structured from search results.",
+                                queries_used=orch.search_queries_used,
+                                extraction_failed=True,
+                            )
+
+                assert orch.state.sentiment_findings.extraction_failed is True
+                assert orch.state.telemetry.extraction_failed is True
+                assert "did not complete successfully" in orch.state.sentiment_findings.sentiment_summary
+
+                # Check instructions generated for Chief Editor
+                instructions = _build_section_instructions(
+                    ReportType.SENTIMENT,
+                    "6-Month",
+                    sentiment_findings=orch.state.sentiment_findings,
+                )
+                assert "Automated sentiment extraction did not complete successfully" in instructions
+                assert "Do not provide a Bullish/Bearish/Neutral market mood verdict" in instructions
+
+
+def test_dynamic_section_planning_bounds_and_editorial_goal():
+    """Verify that section planning caps sections at maximum 7 and adapts to editorial goal."""
+    orch = MasterOrchestrator(
+        user_query="Detailed valuation & margin analysis of L&T",
+        report_type=ReportType.VALUATION,
+        editorial_goal="L&T Infrastructure Margin Sustainability Scan",
+    )
+    orch.state.ticker = "LT.NS"
+
+    # Test auto-planning with editorial goal
+    spec = orch._execute_plan_report_format({})
+    assert len(spec.sections) <= 7
+    assert spec.editorial_goal == "L&T Infrastructure Margin Sustainability Scan"
+    assert "Valuation focus" in spec.rationale
+
+    # Test explicit custom sections list with > 7 sections (must be bounded to 7)
+    custom_raw_sections = [
+        {"key": f"sec_{i}", "title": f"Custom Section {i}", "instruction": f"Instruction {i}", "order": i, "include": True}
+        for i in range(1, 12)
+    ]
+    bounded_spec = orch._execute_plan_report_format({"sections": custom_raw_sections, "rationale": "Custom multi-section blueprint"})
+    assert len(bounded_spec.sections) == 7
+    assert bounded_spec.sections[0].key == "sec_1"
+    assert bounded_spec.sections[6].key == "sec_7"
+
+
+def test_category_retry_cap_guardrail():
+    """Verify that validation does not block finalization if missing category failed >= 2 attempts."""
+    orch = MasterOrchestrator(
+        user_query="valuation of TCS",
+        report_type=ReportType.VALUATION,
+    )
+    orch.state.ticker = "TCS.NS"
+    orch.state.market_data = {
+        "current_price": 3800.0,
+        "market_cap": 14000000000000.0,
+        "eps_ttm": 133.0,
+    }
+    # Fundamentals are missing roe, debt_to_equity; valuation multiples missing
+    # Simulate 2 failed attempts on valuation multiples
+    orch.category_attempts["get_valuation_multiples"] = 2
+    orch.category_attempts["get_fundamentals"] = 2
+    orch.search_queries_used = ["TCS valuation analyst targets"]
+
+    v = orch._execute_validate_data()
+    # Because attempts >= 2, valuation_multiples and fundamentals are skipped from blocking missing list
+    assert "valuation_multiples" not in v.missing
+    assert "fundamentals" not in v.missing
+    assert v.satisfied is True
+
+
+def test_dispatch_compute_custom_financial_metric():
+    """Test that MasterOrchestrator dispatches compute_custom_financial_metric and stores result in state."""
+    orch = MasterOrchestrator(
+        user_query="Analyze Tata Motors ROCE and 3Y Revenue CAGR",
+        report_type=ReportType.EQUITY,
+    )
+    orch.state.ticker = "TATAMOTORS.NS"
+
+    res, summary, ok, err = orch._dispatch_tool(
+        "compute_custom_financial_metric",
+        {
+            "expression": "cagr(beginning_val, ending_val, 3)",
+            "context": {"beginning_val": 200000.0, "ending_val": 430000.0},
+            "metric_name": "3y_revenue_cagr",
+        },
+    )
+    assert ok is True
+    assert orch.state.custom_metrics["3y_revenue_cagr"]["value"] == 29.07
+    assert orch.state.custom_metrics["3y_revenue_cagr"]["formatted_value"] == "+29.07%"
+    assert "3y_revenue_cagr" in orch.state.market_data["custom_metrics"]

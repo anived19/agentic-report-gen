@@ -81,3 +81,49 @@ def test_compile_pdf_smoke(tmp_path: Path):
 
     assert pdf_path.exists()
     assert pdf_path.stat().st_size > 0
+
+
+def test_render_editorial_goal_and_kpi_cards(tmp_path: Path):
+    metrics = MarketMetrics(
+        ticker="LT.NS",
+        company_name="Larsen & Toubro Ltd.",
+        current_price=3500.0,
+        current_price_formatted="Rs. 3,500.00",
+        market_cap_formatted="Rs. 4.80T",
+        pe_ratio_formatted="32.50",
+    )
+    sentiment = SentimentFindings(
+        overall_sentiment=SentimentLabel.BULLISH,
+        sentiment_summary="Strong infrastructure ordering momentum.",
+        key_catalysts=[],
+        key_risks=[],
+    )
+    kpi_cards = [
+        {"label": "Current Price", "value": "Rs. 3,500.00", "note": "Market close"},
+        {"label": "Market Cap", "value": "Rs. 4.80T", "note": "Scale"},
+        {"label": "P/E (TTM)", "value": "32.50", "note": "Trailing"},
+        {"label": "3Y Revenue CAGR", "value": "+18.45%", "note": "Custom Sandbox Metric"},
+    ]
+    report = FinalReport(
+        ticker="LT.NS",
+        company_name="Larsen & Toubro Ltd.",
+        report_type=ReportType.CUSTOM,
+        editorial_goal="L&T Infrastructure Margin Sustainability Scan",
+        markdown_body="## Custom Strategy Analysis\nDetailed margin breakdown.",
+        market_metrics=metrics,
+        sentiment_findings=sentiment,
+        kpi_cards=kpi_cards,
+    )
+
+    html = _render_full_html(report)
+    assert "editorial-goal-badge" in html
+    assert "L&amp;T Infrastructure Margin Sustainability Scan" in html or "L&T Infrastructure Margin Sustainability Scan" in html
+    assert "kpi-table" in html
+    assert "3Y Revenue CAGR" in html
+    assert "+18.45%" in html
+
+    # Verify that PDF compilation compiles cleanly without xhtml2pdf / weasyprint crashing
+    out_file = tmp_path / "test_custom_report.pdf"
+    pdf_path = compile_pdf(report, output_path=out_file)
+    assert pdf_path.exists()
+    assert pdf_path.stat().st_size > 0

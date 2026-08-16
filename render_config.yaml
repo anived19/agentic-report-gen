@@ -23,6 +23,7 @@ report_types:
       - executive_summary
       - financial_highlights
       - fundamentals_deep_dive
+      - holdings
       - valuation_analysis
       - scenario_outlook
     layer2_sections:

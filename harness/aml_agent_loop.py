@@ -117,25 +117,9 @@ def run_aml_adverse_media_agent(
             )
         contents.append(types.Content(role="user", parts=function_response_parts))
 
-    # Build AMLFinding objects directly from raw results — no LLM synthesis
-    findings: list[AMLFinding] = []
-    seen_urls: set[str] = set()
-
-    for item in raw_results:
-        url = item.get("url", "")
-        if not url or url in seen_urls:
-            continue
-        seen_urls.add(url)
-        content = item.get("content", "") or item.get("title", "")
-        severity = _classify_severity(content)
-        if severity in (AMLSeverity.WATCH, AMLSeverity.ELEVATED, AMLSeverity.HIGH):
-            findings.append(AMLFinding(
-                entity_screened=company_name,
-                source_name="Adverse Media (Tavily search)",
-                finding_summary=(content[:300] + "…") if len(content) > 300 else content,
-                severity=severity,
-                source_url=url,
-            ))
+    # Build verified AMLFinding objects using secondary LLM verification filter
+    from tools.aml_tools import _filter_adverse_media_with_llm
+    findings = _filter_adverse_media_with_llm(company_name, raw_results)
 
     if not findings:
         findings.append(AMLFinding(
@@ -150,3 +134,4 @@ def run_aml_adverse_media_agent(
         ))
 
     return findings
+

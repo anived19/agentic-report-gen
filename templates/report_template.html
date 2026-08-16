@@ -11,13 +11,33 @@
 
   <div class="report-header">
     <div class="report-header-left">
-      <h1>{{ company_name }}</h1>
-      <span class="ticker-badge">{{ ticker }}</span>
+      <h1>{{ company_name }}</h1> <span class="ticker-badge">&nbsp;{{ ticker }}&nbsp;</span>
+      {% if editorial_goal %}
+      <div class="editorial-goal-badge">{{ editorial_goal }}</div>
+      {% endif %}
     </div>
     <div class="report-header-right">
       <div class="generated-date">Generated {{ generated_at }}</div>
     </div>
   </div>
+
+  {% if kpi_cards %}
+  <table class="kpi-table">
+    <tr>
+      {% for card in kpi_cards %}
+      {% if loop.index0 > 0 and loop.index0 % 3 == 0 %}
+    </tr>
+    <tr>
+      {% endif %}
+      <td class="kpi-card" style="width: 33.33%;">
+        <div class="kpi-label">{{ card.label }}</div>
+        <div class="kpi-value">{{ card.value }}</div>
+        {% if card.note %}<div class="kpi-note">{{ card.note }}</div>{% endif %}
+      </td>
+      {% endfor %}
+    </tr>
+  </table>
+  {% endif %}
 
   {% if chart_data_uri %}
   <div class="chart-container">

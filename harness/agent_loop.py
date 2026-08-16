@@ -193,7 +193,14 @@ def _extract_structured_findings(
 ) -> SentimentFindings:
     """Phase B: force a clean, schema-constrained JSON summary out of the accumulated conversation."""
     schema = _sentiment_response_json_schema()
-    extraction_contents = list(contents) + [
+    if contents and contents[0].role != "user":
+        extraction_contents = [
+            types.Content(role="user", parts=[types.Part(text="Perform research and sentiment extraction on the following search results.")])
+        ] + list(contents)
+    else:
+        extraction_contents = list(contents)
+
+    extraction_contents.append(
         types.Content(
             role="user",
             parts=[
@@ -201,12 +208,15 @@ def _extract_structured_findings(
                     text=(
                         "Based on everything you found above, output your final sentiment "
                         "assessment now as JSON matching the required schema. Every entry in "
-                        "key_catalysts and key_risks must use a source_url you actually retrieved."
+                        "key_catalysts and key_risks must use a source_url you actually retrieved.\n"
+                        "CRITICAL CURRENCY INSTRUCTION: Use the target company's native reporting currency. "
+                        "For Indian companies (e.g. .NS, .BO, Tata, TCS, Infosys, Reliance), use Rs. / INR / Cr / Lakhs — "
+                        "NEVER substitute USD '$' or '$ billion' for Indian rupee values unless the source explicitly discusses USD amounts."
                     )
                 )
             ],
         )
-    ]
+    )
 
     last_error: ValidationError | None = None
 

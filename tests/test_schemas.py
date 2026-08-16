@@ -13,15 +13,17 @@ from schemas import (
     SentimentFindings,
     SentimentLabel,
     format_currency_amount,
+    format_number_amount,
+    format_percent,
 )
 
 
 def test_format_currency_amount():
     # INR formatting
-    assert format_currency_amount(1.7727538331648e13, "INR") == "₹17.73 Lakh Cr"
-    assert format_currency_amount(5000000000.0, "INR") == "₹500.00 Cr"
-    assert format_currency_amount(2500000.0, "INR") == "₹25.00 Lakhs"
-    assert format_currency_amount(15000.5, "INR") == "₹15,000.50"
+    assert format_currency_amount(1.7727538331648e13, "INR") == "Rs. 17.73 Lakh Cr"
+    assert format_currency_amount(5000000000.0, "INR") == "Rs. 500.00 Cr"
+    assert format_currency_amount(2500000.0, "INR") == "Rs. 25.00 Lakhs"
+    assert format_currency_amount(15000.5, "INR") == "Rs. 15,000.50"
 
     # USD / other formatting
     assert format_currency_amount(3120000000000.0, "USD") == "$3.12T"
@@ -32,6 +34,29 @@ def test_format_currency_amount():
 
     # None handling
     assert format_currency_amount(None) is None
+
+
+def test_format_number_amount():
+    assert format_number_amount(2456.122) == "2,456.12"
+    assert format_number_amount(3480.0) == "3,480.00"
+    assert format_number_amount(1800.0) == "1,800.00"
+    assert format_number_amount(1234567.891, decimals=2) == "1,234,567.89"
+    assert format_number_amount(None) is None
+
+
+def test_format_percent():
+    # Decimal fractions
+    assert format_percent(0.40389) == "40.39%"
+    assert format_percent(0.23963) == "23.96%"
+    assert format_percent(0.47743) == "47.74%"
+    assert format_percent(0.5493) == "54.93%"
+    assert format_percent(0.0275) == "2.75%"
+
+    # Already percentages / signed growth
+    assert format_percent(2.23, include_sign=True) == "+2.23%"
+    assert format_percent(-2.69, include_sign=True) == "-2.69%"
+    assert format_percent(71.8) == "71.80%"
+    assert format_percent(None) is None
 
 
 def test_cited_claim_valid():
@@ -106,3 +131,24 @@ def test_final_report_assembly():
     assert report.ticker == "TCS.NS"
     assert report.report_type == ReportType.EQUITY
     assert report.aml_result is None
+
+
+def test_sentiment_extraction_failed_schema():
+    findings = SentimentFindings(
+        overall_sentiment=SentimentLabel.NEUTRAL,
+        sentiment_summary="Automated sentiment extraction did not complete successfully for this run; no catalysts or risks could be structured from search results.",
+        extraction_failed=True,
+    )
+    assert findings.extraction_failed is True
+    assert "did not complete successfully" in findings.sentiment_summary
+
+
+def test_quarterly_data_gap_note_schema():
+    from schemas import QuarterlyDataPoint
+    q = QuarterlyDataPoint(
+        quarter="Q2 FY2025",
+        revenue=1000000.0,
+        net_income=200000.0,
+        data_gap_note="A prior quarter may be missing from source data (yfinance).",
+    )
+    assert q.data_gap_note == "A prior quarter may be missing from source data (yfinance)."
