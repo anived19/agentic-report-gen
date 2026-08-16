@@ -138,6 +138,7 @@ class MasterOrchestrator:
         self.raw_search_contents: list[types.Content] = []
         self.cached_idempotent_calls: dict[str, Any] = {}
         self.category_attempts: dict[str, int] = {}
+        self._format_retries: int = 0
 
     def _load_all_skills(self) -> None:
         skill_names = [
@@ -257,6 +258,9 @@ class MasterOrchestrator:
         if sections:
             sections = sorted(sections, key=lambda x: x.order)[:7]
 
+        # Determine source: model-supplied vs fallback ladder
+        report_spec_source = "agent" if sections else "fallback"
+
         if not sections:
             # Generate adaptive section spec based on editorial_goal & report_type
             goal_lower = (self.state.editorial_goal or self.state.user_query or "").lower()
@@ -319,7 +323,12 @@ class MasterOrchestrator:
 
         # Enforce hard cap at 7 sections (Refinement #4)
         sections = sections[:7]
-        spec = ReportSpec(sections=sections, rationale=rationale, editorial_goal=self.state.editorial_goal)
+        spec = ReportSpec(
+            sections=sections,
+            rationale=rationale,
+            editorial_goal=self.state.editorial_goal,
+            report_spec_source=report_spec_source,
+        )
         self.state.report_spec = spec
         return spec
 
@@ -544,8 +553,18 @@ class MasterOrchestrator:
             return v.model_dump(), summary, True, None
 
         elif tool_name == "plan_report_format":
+            if not args.get("sections") and self._format_retries < 2:
+                self._format_retries += 1
+                err = (
+                    "Error: 'sections' cannot be empty. You must explicitly design the "
+                    "report sections and emphasize specific data points you retrieved "
+                    "(e.g. the exact price movement, AML flags, or custom YoY growth metrics). "
+                    "Retry plan_report_format with a fully populated 'sections' list."
+                )
+                return {}, err, False, err
+
             spec = self._execute_plan_report_format(args)
-            summary = f"Planned report format: {len(spec.sections)} sections. Rationale: {spec.rationale[:60]}..."
+            summary = f"Planned report format ({spec.report_spec_source}): {len(spec.sections)} sections. Rationale: {spec.rationale[:60]}..."
             return spec.model_dump(), summary, True, None
 
         elif tool_name == "finalize_report":

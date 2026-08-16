@@ -228,7 +228,7 @@ def test_trace_dump_and_telemetry():
     orch.state.telemetry.gemini_calls = 3
     orch.state.telemetry.tavily_calls = 1
     orch.state.telemetry.wall_clock_seconds = 4.5
-    orch.state.report_spec = ReportSpec(sections=[], rationale="Test rationale")
+    orch.state.report_spec = ReportSpec(sections=[], rationale="Test rationale", report_spec_source="agent")
 
     orch._dump_trace()
 
@@ -369,3 +369,56 @@ def test_dispatch_compute_custom_financial_metric():
     assert orch.state.custom_metrics["3y_revenue_cagr"]["value"] == 29.07
     assert orch.state.custom_metrics["3y_revenue_cagr"]["formatted_value"] == "+29.07%"
     assert "3y_revenue_cagr" in orch.state.market_data["custom_metrics"]
+
+
+def test_dispatch_plan_report_format_retry_and_telemetry():
+    """Verify that plan_report_format rejects empty sections twice with structured error before falling back."""
+    orch = MasterOrchestrator(
+        user_query="valuation of TCS",
+        report_type=ReportType.VALUATION,
+    )
+    orch.state.ticker = "TCS.NS"
+
+    # 1st attempt: empty sections -> rejection + increment counter
+    res1, summary1, ok1, err1 = orch._dispatch_tool("plan_report_format", {})
+    assert ok1 is False
+    assert orch._format_retries == 1
+    assert "Error: 'sections' cannot be empty" in err1
+
+    # 2nd attempt: still empty sections -> rejection + increment counter
+    res2, summary2, ok2, err2 = orch._dispatch_tool("plan_report_format", {"sections": []})
+    assert ok2 is False
+    assert orch._format_retries == 2
+    assert "Error: 'sections' cannot be empty" in err2
+
+    # 3rd attempt: empty sections -> retry ceiling reached, falls through to fallback ladder
+    res3, summary3, ok3, err3 = orch._dispatch_tool("plan_report_format", {})
+    assert ok3 is True
+    assert err3 is None
+    assert res3["report_spec_source"] == "fallback"
+    assert orch.state.report_spec.report_spec_source == "fallback"
+    assert "fallback" in summary3
+
+
+def test_dispatch_plan_report_format_agent_success():
+    """Verify that plan_report_format with explicit sections succeeds immediately with agent telemetry."""
+    orch = MasterOrchestrator(
+        user_query="valuation of TCS",
+        report_type=ReportType.VALUATION,
+    )
+    orch.state.ticker = "TCS.NS"
+
+    custom_sections = [
+        {"key": "executive_summary", "title": "Exec Summary", "order": 1, "include": True},
+        {"key": "valuation_analysis", "title": "Valuation Multiples", "order": 2, "include": True},
+    ]
+    res, summary, ok, err = orch._dispatch_tool(
+        "plan_report_format",
+        {"sections": custom_sections, "rationale": "Explicit agent planned sections"},
+    )
+    assert ok is True
+    assert err is None
+    assert res["report_spec_source"] == "agent"
+    assert orch.state.report_spec.report_spec_source == "agent"
+    assert orch._format_retries == 0
+    assert "agent" in summary

@@ -9,6 +9,7 @@ Editor: one generate_content call each, no loop, no agentic behavior.
 from __future__ import annotations
 
 import logging
+from typing import Optional
 
 from google import genai
 from google.genai import types

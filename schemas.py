@@ -370,6 +370,7 @@ class ReportSpec(BaseModel):
     sections: list[SectionSpec]
     rationale: str               # why this shape — goes in the trace log, not the report itself
     editorial_goal: Optional[str] = None
+    report_spec_source: str = "unknown"
 
 
 class RunTelemetry(BaseModel):
