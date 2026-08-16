@@ -1,0 +1,198 @@
+@page {
+  size: A4;
+  margin: 2.2cm 1.8cm 2.4cm 1.8cm;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Georgia", "Times New Roman", serif;
+  color: #1c1c1c;
+  font-size: 10.5pt;
+  line-height: 1.5;
+}
+
+.report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 2px solid #1a3c6e;
+  padding-bottom: 10px;
+  margin-bottom: 18px;
+}
+
+.report-header h1 {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 20pt;
+  color: #1a3c6e;
+  margin: 0 0 4px 0;
+  display: inline-block;
+}
+
+.ticker-badge {
+  display: inline-block;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 9pt;
+  font-weight: bold;
+  color: #ffffff;
+  background: #1a3c6e;
+  padding: 2px 8px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.generated-date {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 8.5pt;
+  color: #666;
+}
+
+.chart-container {
+  text-align: center;
+  margin: 14px 0 22px 0;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.price-chart {
+  max-width: 100%;
+  border: 1px solid #ddd;
+}
+
+.report-body h1 {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 15pt;
+  color: #1a3c6e;
+  border-bottom: 1px solid #c9d6e8;
+  padding-bottom: 4px;
+  margin-top: 26px;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.report-body h2 {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 12.5pt;
+  color: #1a3c6e;
+  margin-top: 20px;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.report-body h3 {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 11pt;
+  color: #2a4e7e;
+  margin-top: 14px;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.report-body p {
+  margin: 8px 0;
+  orphans: 3;
+  widows: 3;
+}
+
+.report-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 9.5pt;
+  page-break-inside: auto;
+}
+
+.report-body th {
+  background: #1a3c6e;
+  color: #fff;
+  text-align: left;
+  padding: 6px 8px;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 9pt;
+}
+
+.report-body td {
+  padding: 5px 8px;
+  border-bottom: 1px solid #e2e2e2;
+}
+
+.report-body tr {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.report-body tr:nth-child(even) td {
+  background: #f6f8fb;
+}
+
+.report-body ul,
+.report-body ol {
+  margin: 8px 0;
+  padding-left: 22px;
+  page-break-inside: auto;
+}
+
+.report-body li {
+  margin: 3px 0;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.report-body a {
+  color: #1a3c6e;
+  text-decoration: none;
+  border-bottom: 1px dotted #1a3c6e;
+}
+
+/* AML section: visually distinct from the financial report body */
+.report-body hr {
+  border: none;
+  border-top: 2px solid #c9d6e8;
+  margin: 28px 0 18px 0;
+}
+
+/* Severity indicators in the AML table (emoji-based for PDF compat) */
+/* These appear as literal text in the table cells — no CSS class needed */
+
+.disclaimer {
+  margin-top: 24px;
+  padding: 8px 12px;
+  border-top: 1px solid #ccc;
+  border-left: 3px solid #1a3c6e;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 7.5pt;
+  color: #555;
+  font-style: italic;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.aml-disclaimer {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-top: 1px solid #c8a800;
+  border-left: 3px solid #c8a800;
+  background: #fffdf0;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 7.5pt;
+  color: #555;
+  font-style: italic;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+blockquote {
+  border-left: 3px solid #c8a800;
+  background: #fffdf0;
+  margin: 10px 0;
+  padding: 6px 12px;
+  font-size: 9pt;
+  color: #444;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+

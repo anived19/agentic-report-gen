@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ title }}</title>
+<style>
+{{ css | safe }}
+</style>
+</head>
+<body>
+
+  <div class="report-header">
+    <div class="report-header-left">
+      <h1>{{ company_name }}</h1>
+      <span class="ticker-badge">{{ ticker }}</span>
+    </div>
+    <div class="report-header-right">
+      <div class="generated-date">Generated {{ generated_at }}</div>
+    </div>
+  </div>
+
+  {% if chart_data_uri %}
+  <div class="chart-container">
+    <img src="{{ chart_data_uri }}" alt="{{ outlook_months }}-month price trend chart" class="price-chart">
+  </div>
+  {% endif %}
+
+  <div class="report-body">
+    {{ body_html | safe }}
+  </div>
+
+  <div class="disclaimer">
+    <strong>Layer 1 — Investment Research Disclaimer:</strong>
+    This report is generated for informational purposes only and does not constitute investment advice
+    or a recommendation to buy or sell any security. Market data is sourced from Yahoo Finance (via yfinance);
+    news and sentiment sources are cited inline. Past performance and current sentiment are not indicative of
+    future results. Analyst consensus data sourced from Yahoo Finance broker aggregate — not independently verified.
+  </div>
+
+  {% if has_aml %}
+  <div class="aml-disclaimer">
+    <strong>Layer 2 — AML/ABC Compliance Disclaimer:</strong>
+    The AML/ABC screening section above is an automated first-pass search of publicly available
+    databases (OFAC SDN, OpenSanctions, World Bank, UN, EU, SEC EDGAR, TI CPI, FATF, Tavily).
+    It is provided for informational purposes only. It does not constitute a legal or regulatory
+    determination, does not represent AML/ABC clearance, and must not be used as a substitute
+    for professional compliance due diligence. Absence of findings does not certify that no
+    adverse information exists. Data coverage varies by source and may be incomplete.
+  </div>
+  {% endif %}
+
+</body>
+</html>

@@ -1,0 +1,17 @@
+google-genai>=1.0.0
+tavily-python>=0.5.0
+yfinance>=1.5.0
+pandas>=2.0.0
+pydantic>=2.7.0
+pydantic-settings>=2.3.0
+python-dotenv>=1.0.0
+tenacity>=8.3.0
+markdown>=3.6
+Jinja2>=3.1.0
+weasyprint>=62.0
+xhtml2pdf>=0.2.16
+matplotlib>=3.9.0
+PyYAML>=6.0
+requests>=2.31.0
+pytest>=8.0.0
+pytest-mock>=3.12.0

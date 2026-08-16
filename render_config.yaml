@@ -1,0 +1,115 @@
+# render_config.yaml
+#
+# Data-driven section configuration for the Chief Editor and PDF renderer.
+# Adding a new section to a report type: add its key to the layer1_sections
+# or layer2_sections list. Adding a new section type: implement an instruction
+# builder in harness/synthesis.py and a heading entry in _SECTION_HEADINGS.
+#
+# This file is the single source of truth for what appears in each report type
+# and in what order — no code changes needed for reordering or adding sections.
+
+report_types:
+  sentiment:
+    layer1_sections:
+      - executive_summary
+      - sentiment_news
+      - risk_factors
+      - scenario_outlook
+    layer2_sections:
+      - aml_abc_screening   # only included when --aml flag is set
+
+  valuation:
+    layer1_sections:
+      - executive_summary
+      - financial_highlights
+      - fundamentals_deep_dive
+      - valuation_analysis
+      - scenario_outlook
+    layer2_sections:
+      - aml_abc_screening
+
+  equity:
+    layer1_sections:
+      - executive_summary
+      - financial_highlights
+      - fundamentals_deep_dive
+      - technicals
+      - holdings
+      - valuation_analysis
+      - sentiment_news
+      - risk_factors
+      - scenario_outlook
+    layer2_sections:
+      - aml_abc_screening
+
+  general:
+    layer1_sections:
+      - executive_summary
+      - financial_highlights
+      - sentiment_news
+      - risk_factors
+      - scenario_outlook
+    layer2_sections:
+      - aml_abc_screening
+
+# Section metadata — used by .agents/skills/pdf-report-generator/SKILL.md
+# and for documentation. Not read at runtime by the renderer itself; the
+# actual rendering logic lives in harness/synthesis.py and tools/pdf_tools.py.
+section_specs:
+  executive_summary:
+    heading: "Executive Summary"
+    layer: 1
+    description: "High-level verdict on company position, sentiment, and near-term outlook."
+
+  financial_highlights:
+    heading: "Financial Highlights"
+    layer: 1
+    description: "Key price and market data table (price, market cap, MAs, period high/low)."
+
+  fundamentals_deep_dive:
+    heading: "Fundamentals Deep-Dive"
+    layer: 1
+    description: >
+      Three sub-tables: key metrics (EPS, DY, D/E, ROE, ROCE),
+      analyst consensus (buy/hold/sell counts, targets),
+      quarterly financials (last 4 quarters, QoQ growth).
+
+  technicals:
+    heading: "Technical Analysis"
+    layer: 1
+    description: "RSI-14, MACD (12/26/9), volume trend, support/resistance levels."
+
+  holdings:
+    heading: "Ownership & Holdings"
+    layer: 1
+    description: "Promoter/insider %, combined institutional %, public float %."
+
+  valuation_analysis:
+    heading: "Valuation Analysis"
+    layer: 1
+    description: "Full multiples table: P/E, forward P/E, P/B, P/S, EV/EBITDA, margins."
+
+  sentiment_news:
+    heading: "Market Sentiment & News"
+    layer: 1
+    description: "Overall sentiment label + cited catalysts and risks from the Research agent."
+
+  risk_factors:
+    heading: "Risk Factors"
+    layer: 1
+    description: "Dedicated risk section with 3-5 cited risks from the Research agent."
+
+  scenario_outlook:
+    heading: "Outlook"
+    layer: 1
+    description: "Bull / Base / Bear scenario outlook tied to specific metrics and catalysts."
+
+  aml_abc_screening:
+    heading: "AML / ABC Compliance Screening"
+    layer: 2
+    disclaimer: true
+    description: >
+      Structured screening table: entity → source → finding → severity → citation.
+      Sources: OFAC SDN, OpenSanctions, World Bank Debarred, UN Consolidated List,
+      EU Sanctions, SEC EDGAR FCPA, TI CPI, FATF grey/black list snapshot,
+      Tavily adverse-media search (SEBI, ED, SFO/NCA domains).

@@ -1,0 +1,26 @@
+# Environment variables
+.env
+
+# Output files & caches
+outputs/
+cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdf
+
+# Testing & linting
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE & Virtual Environments
+venv/
+.venv/
+.idea/
+.vscode/
+
+
+.DS_Store
+thumbs.db

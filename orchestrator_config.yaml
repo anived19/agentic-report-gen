@@ -1,0 +1,42 @@
+# orchestrator_config.yaml
+#
+# Data-requirement profiles per ReportType.
+# Used by validate_data to enforce deterministic completeness before finalize_report.
+
+VALUATION:
+  required:
+    - price_snapshot
+    - valuation_multiples
+    - fundamentals
+  optional:
+    - technicals
+    - ownership
+    - quarterly_financials
+  min_news_searches: 1
+
+EQUITY:
+  required:
+    - price_snapshot
+    - valuation_multiples
+    - fundamentals
+    - technicals
+    - ownership
+  optional:
+    - quarterly_financials
+  min_news_searches: 2
+
+SENTIMENT:
+  required:
+    - price_snapshot
+  optional:
+    - valuation_multiples
+  min_news_searches: 3
+
+GENERAL:
+  required:
+    - price_snapshot
+  optional:
+    - valuation_multiples
+    - fundamentals
+    - technicals
+  min_news_searches: 1

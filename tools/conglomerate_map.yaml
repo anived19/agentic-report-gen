@@ -1,0 +1,199 @@
+# tools/conglomerate_map.yaml
+# Curated mapping of conglomerate group names to their listed group entities.
+# resolve_entity() checks this table first before querying yfinance search.
+
+tata:
+  - name: "Tata Consultancy Services"
+    ticker: "TCS.NS"
+    exchange: "NSE"
+    sector: "Information Technology"
+    confidence: 1.0
+  - name: "Tata Motors Passenger Vehicles"
+    ticker: "TMPV.NS"
+    exchange: "NSE"
+    sector: "Automotive"
+    confidence: 1.0
+  - name: "Tata Motors Commercial Vehicles"
+    ticker: "TMCV.NS"
+    exchange: "NSE"
+    sector: "Commercial Vehicles"
+    confidence: 1.0
+  - name: "Tata Steel"
+    ticker: "TATASTEEL.NS"
+    exchange: "NSE"
+    sector: "Metals & Mining"
+    confidence: 1.0
+  - name: "Tata Power"
+    ticker: "TATAPOWER.NS"
+    exchange: "NSE"
+    sector: "Power & Utilities"
+    confidence: 1.0
+  - name: "Tata Consumer Products"
+    ticker: "TATACONSUM.NS"
+    exchange: "NSE"
+    sector: "FMCG"
+    confidence: 1.0
+  - name: "Titan Company"
+    ticker: "TITAN.NS"
+    exchange: "NSE"
+    sector: "Consumer Goods & Jewellery"
+    confidence: 1.0
+  - name: "Tata Communications"
+    ticker: "TATACOMM.NS"
+    exchange: "NSE"
+    sector: "Telecommunications"
+    confidence: 1.0
+  - name: "Tata Chemicals"
+    ticker: "TATACHEM.NS"
+    exchange: "NSE"
+    sector: "Chemicals"
+    confidence: 1.0
+
+reliance:
+  - name: "Reliance Industries"
+    ticker: "RELIANCE.NS"
+    exchange: "NSE"
+    sector: "Conglomerate / Energy / Retail / Telecom"
+    confidence: 1.0
+  - name: "Reliance Power"
+    ticker: "RPOWER.NS"
+    exchange: "NSE"
+    sector: "Power & Utilities"
+    confidence: 1.0
+  - name: "Reliance Infrastructure"
+    ticker: "RELINFRA.NS"
+    exchange: "NSE"
+    sector: "Infrastructure"
+    confidence: 1.0
+
+adani:
+  - name: "Adani Enterprises"
+    ticker: "ADANIENT.NS"
+    exchange: "NSE"
+    sector: "Conglomerate / Mining / Infrastructure"
+    confidence: 1.0
+  - name: "Adani Ports and Special Economic Zone"
+    ticker: "ADANIPORTS.NS"
+    exchange: "NSE"
+    sector: "Infrastructure & Logistics"
+    confidence: 1.0
+  - name: "Adani Green Energy"
+    ticker: "ADANIGREEN.NS"
+    exchange: "NSE"
+    sector: "Renewable Energy"
+    confidence: 1.0
+  - name: "Adani Power"
+    ticker: "ADANIPOWER.NS"
+    exchange: "NSE"
+    sector: "Power Generation"
+    confidence: 1.0
+  - name: "Adani Total Gas"
+    ticker: "ATGL.NS"
+    exchange: "NSE"
+    sector: "Oil & Gas Distribution"
+    confidence: 1.0
+  - name: "Adani Wilmar"
+    ticker: "AWL.NS"
+    exchange: "NSE"
+    sector: "FMCG"
+    confidence: 1.0
+
+mahindra:
+  - name: "Mahindra & Mahindra"
+    ticker: "M&M.NS"
+    exchange: "NSE"
+    sector: "Automotive & Farm Equipment"
+    confidence: 1.0
+  - name: "Tech Mahindra"
+    ticker: "TECHM.NS"
+    exchange: "NSE"
+    sector: "Information Technology"
+    confidence: 1.0
+  - name: "Mahindra & Mahindra Financial Services"
+    ticker: "M&MFIN.NS"
+    exchange: "NSE"
+    sector: "Financial Services"
+    confidence: 1.0
+  - name: "Mahindra Lifespace Developers"
+    ticker: "MAHLIFE.NS"
+    exchange: "NSE"
+    sector: "Real Estate"
+    confidence: 1.0
+
+bajaj:
+  - name: "Bajaj Finance"
+    ticker: "BAJFINANCE.NS"
+    exchange: "NSE"
+    sector: "Financial Services / NBFC"
+    confidence: 1.0
+  - name: "Bajaj Finserv"
+    ticker: "BAJAJFINSV.NS"
+    exchange: "NSE"
+    sector: "Financial Services"
+    confidence: 1.0
+  - name: "Bajaj Auto"
+    ticker: "BAJAJ-AUTO.NS"
+    exchange: "NSE"
+    sector: "Automotive"
+    confidence: 1.0
+  - name: "Bajaj Holdings & Investment"
+    ticker: "BAJAJHLDNG.NS"
+    exchange: "NSE"
+    sector: "Holding Company"
+    confidence: 1.0
+
+aditya birla:
+  - name: "UltraTech Cement"
+    ticker: "ULTRACEMCO.NS"
+    exchange: "NSE"
+    sector: "Building Materials / Cement"
+    confidence: 1.0
+  - name: "Grasim Industries"
+    ticker: "GRASIM.NS"
+    exchange: "NSE"
+    sector: "Chemicals / Textiles"
+    confidence: 1.0
+  - name: "Hindalco Industries"
+    ticker: "HINDALCO.NS"
+    exchange: "NSE"
+    sector: "Metals & Mining"
+    confidence: 1.0
+  - name: "Aditya Birla Capital"
+    ticker: "ABCAPITAL.NS"
+    exchange: "NSE"
+    sector: "Financial Services"
+    confidence: 1.0
+
+hdfc:
+  - name: "HDFC Bank"
+    ticker: "HDFCBANK.NS"
+    exchange: "NSE"
+    sector: "Banking"
+    confidence: 1.0
+  - name: "HDFC Life Insurance"
+    ticker: "HDFCLIFE.NS"
+    exchange: "NSE"
+    sector: "Insurance"
+    confidence: 1.0
+  - name: "HDFC Asset Management Company"
+    ticker: "HDFCAMC.NS"
+    exchange: "NSE"
+    sector: "Asset Management"
+    confidence: 1.0
+
+icici:
+  - name: "ICICI Bank"
+    ticker: "ICICIBANK.NS"
+    exchange: "NSE"
+    sector: "Banking"
+    confidence: 1.0
+  - name: "ICICI Prudential Life Insurance"
+    ticker: "ICICIPRULI.NS"
+    exchange: "NSE"
+    sector: "Insurance"
+    confidence: 1.0
+  - name: "ICICI Lombard General Insurance"
+    ticker: "ICICIGI.NS"
+    exchange: "NSE"
+    sector: "Insurance"
+    confidence: 1.0
