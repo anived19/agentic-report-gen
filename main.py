@@ -32,10 +32,7 @@ def generate_report(user_query: str, run_aml: bool = False) -> None:
 
     print("[1/3] Identifying initial company reference, report type, and editorial goal...")
     try:
-        priors = extract_intake_priors(user_query)
-        company_reference = priors["company_reference"]
-        report_type = priors["report_type"]
-        editorial_goal = priors["editorial_goal"]
+        company_reference, report_type, editorial_goal = extract_intake_priors(user_query)
     except Exception as exc:
         logger.warning("Intake extraction fallback: %s", exc)
         company_reference = None
