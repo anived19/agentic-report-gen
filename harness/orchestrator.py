@@ -75,6 +75,41 @@ def _pace_gemini_call() -> None:
     _last_gemini_call_timestamp = time.time()
 
 
+def _coerce_list(val: Any) -> list[str]:
+    """
+    Safely coerces various data structures or stringified lists into list[str].
+    Fallback chain: native list/tuple/set -> json.loads -> ast.literal_eval -> comma-split string.
+    """
+    if val is None:
+        return []
+    if isinstance(val, (list, tuple, set)):
+        return [str(x).strip() for x in val if x is not None and str(x).strip()]
+    if isinstance(val, str):
+        s = val.strip()
+        if not s or s.lower() in ("[]", "none", "null", "()", "{}"):
+            return []
+        # Try JSON parsing
+        try:
+            parsed = json.loads(s)
+            if isinstance(parsed, (list, tuple, set)):
+                return [str(x).strip() for x in parsed if x is not None and str(x).strip()]
+        except Exception:
+            pass
+        # Try Python literal evaluation (e.g. "['risk']")
+        try:
+            import ast
+            parsed = ast.literal_eval(s)
+            if isinstance(parsed, (list, tuple, set)):
+                return [str(x).strip() for x in parsed if x is not None and str(x).strip()]
+        except Exception:
+            pass
+        # Try comma-splitting if string contains commas
+        if "," in s:
+            return [item.strip() for item in s.split(",") if item.strip()]
+        return [s]
+    return [str(val).strip()]
+
+
 def ask_user(question: str, options: list[str]) -> str:
     """
     The only human-interaction point in the system.
@@ -378,8 +413,8 @@ class MasterOrchestrator:
             return {"candidates": candidates}, summary, True, None
 
         elif tool_name == "ask_user":
-            question = args.get("question", "Which company did you mean?")
-            options = args.get("options", [])
+            question = str(args.get("question", "Which company did you mean?"))
+            options = _coerce_list(args.get("options", []))
             if not options and self.state.candidate_entities:
                 options = [f"{c.get('name', '')} ({c.get('ticker', '')})" for c in self.state.candidate_entities]
 
@@ -597,9 +632,9 @@ class MasterOrchestrator:
             return spec.model_dump(), summary, True, None
 
         elif tool_name == "reflect_on_progress":
-            gathered_summary = args.get("gathered_summary", "")
-            still_needed = args.get("still_needed", [])
-            next_action_rationale = args.get("next_action_rationale", "")
+            gathered_summary = str(args.get("gathered_summary", ""))
+            still_needed = _coerce_list(args.get("still_needed", []))
+            next_action_rationale = str(args.get("next_action_rationale", ""))
             summary = (
                 f"Reflection recorded: {len(still_needed)} gap(s) noted"
                 + (f" — {still_needed}" if still_needed else " — none, ready to finalize")
@@ -652,6 +687,7 @@ class MasterOrchestrator:
             system_instruction=system_prompt,
             tools=tools,
             thinking_config=thinking_config,
+            max_output_tokens=4096,
         )
 
         user_initial_text = (
@@ -744,20 +780,30 @@ class MasterOrchestrator:
 
             calls = response.function_calls or []
             if not calls:
-                # If model stopped calling tools without finalizing, check validation
-                v = self._execute_validate_data()
-                if v.satisfied:
-                    if not self.state.report_spec:
-                        self._execute_plan_report_format({})
+                finish_reason = None
+                if response.candidates:
+                    finish_reason = getattr(response.candidates[0], "finish_reason", None)
+                logger.info("Empty function calls on turn %d (finish_reason: %s)", self.state.turn, finish_reason)
+
+                # If finalize_report has already been called and completed, we are done
+                if self.category_attempts.get("finalize_report", 0) > 0:
                     self.state.status = AgentStatus.DONE
                     break
-                else:
-                    # Feed back validation requirements to continue the loop
-                    contents.append(types.Content(
-                        role="user",
-                        parts=[types.Part(text=f"Validation incomplete. Missing categories: {v.missing}. Fetch the remaining required data.")]
-                    ))
-                    continue
+
+                if str(finish_reason).upper() == "MAX_TOKENS":
+                    logger.warning("Turn %d hit MAX_TOKENS finish_reason; model output was truncated.", self.state.turn)
+
+                # Bounce back to the model: do not silently complete
+                contents.append(types.Content(
+                    role="user",
+                    parts=[types.Part(text=(
+                        "You responded with text or thoughts but did not execute a function call. "
+                        "You must continue your execution flow and explicitly call "
+                        "reflect_on_progress() if you haven't, validate_data(), plan_report_format() with custom sections, "
+                        "and finalize_report(). Do not stop until finalize_report() is executed."
+                    ))]
+                ))
+                continue
 
             function_response_parts = []
             for call in calls:

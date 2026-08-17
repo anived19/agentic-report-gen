@@ -566,4 +566,71 @@ def test_reasoning_extraction_with_thoughts_and_rationale():
     assert res_text == "[Thought: Thinking about company fundamentals...] Fetching valuation multiples for TCS.NS."
 
 
+def test_coerce_list_fallback_chain():
+    """Verify _coerce_list parses JSON, Python literals, comma-separated strings, and empty representations."""
+    from harness.orchestrator import _coerce_list
+
+    # None and empty strings
+    assert _coerce_list(None) == []
+    assert _coerce_list("") == []
+    assert _coerce_list("   ") == []
+    assert _coerce_list("[]") == []
+    assert _coerce_list("None") == []
+    assert _coerce_list("null") == []
+
+    # Valid JSON lists
+    assert _coerce_list('["risk", "debt"]') == ["risk", "debt"]
+    assert _coerce_list('[]') == []
+
+    # Python literal lists (single quotes - invalid JSON)
+    assert _coerce_list("['risk', 'debt']") == ["risk", "debt"]
+    assert _coerce_list("('risk', 'debt')") == ["risk", "debt"]
+
+    # Comma-separated strings
+    assert _coerce_list("risk, debt, governance") == ["risk", "debt", "governance"]
+
+    # Plain single string
+    assert _coerce_list("revenue_growth") == ["revenue_growth"]
+
+    # Native collections
+    assert _coerce_list(["a", "b"]) == ["a", "b"]
+    assert _coerce_list(("a", "b")) == ["a", "b"]
+
+
+def test_reflect_on_progress_coerced_args():
+    """Verify reflect_on_progress handles stringified empty lists without showing '2 gap(s) noted - []'."""
+    orch = MasterOrchestrator(
+        user_query="valuation of TCS",
+        report_type=ReportType.VALUATION,
+    )
+    orch.state.ticker = "TCS.NS"
+
+    # Pass stringified empty list "[]"
+    res, summary, ok, err = orch._dispatch_tool(
+        "reflect_on_progress",
+        {
+            "gathered_summary": "Fetched market data.",
+            "still_needed": "[]",
+            "next_action_rationale": "Ready to finalize.",
+        },
+    )
+    assert ok is True
+    assert "0 gap(s) noted" in summary
+    assert "none, ready to finalize" in summary
+
+    # Pass Python literal list "['adverse_media']"
+    res2, summary2, ok2, err2 = orch._dispatch_tool(
+        "reflect_on_progress",
+        {
+            "gathered_summary": "Fetched market data.",
+            "still_needed": "['adverse_media']",
+            "next_action_rationale": "Need adverse media search.",
+        },
+    )
+    assert ok2 is True
+    assert "1 gap(s) noted" in summary2
+    assert "adverse_media" in summary2
+
+
+
 

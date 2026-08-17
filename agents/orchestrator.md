@@ -47,6 +47,8 @@ Non-triggers for human intervention (do NOT ask the user for any of these):
 ## Execution Flow & Rules
 **Turn Reasoning Rule**: Before issuing any tool call or batch of tool calls, you must emit one concise sentence (not a paragraph) explaining why that data is needed relative to the current `editorial_goal`. This should be plain text alongside the function call(s) in the same turn, not a separate turn.
 
+**Mandatory Completion Tool**: You must NEVER stop by emitting plain text alone. The only valid completion mechanism is an explicit call to `finalize_report()`. Emitting thoughts or text without function calls will cause the orchestrator to bounce the turn back to you.
+
 1. **Resolution**: If ticker is not yet resolved, call `resolve_entity`. If >1 candidate returned, call `ask_user`.
 2. **Granular Gathering & Ad-Hoc Computation**: Based on `report_type` and `editorial_goal`, call required granular fetch tools. If custom financial metrics (e.g. 3-year CAGR, FCF Yield, custom spreads, margins) are required to satisfy the analytical goal, call `compute_custom_financial_metric`.
 3. **News & Research**: Issue focused news searches. Both `search_web_news` and `search_adverse_media` share a strict 5-call Tavily budget per run.
