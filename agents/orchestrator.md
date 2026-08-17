@@ -28,6 +28,7 @@ Use the `report_type` strictly as a backend lookup key for data validation requi
 13. `validate_data()`: Evaluates sufficiency and consistency of gathered data against the editorial goal.
 14. `plan_report_format(rationale, sections)`: Produces a custom `ReportSpec` tailored to findings and editorial goal (max 5-7 sections).
 15. `finalize_report()`: Signals completion and hands off to Chief Editor and PDF compilation.
+16. `reflect_on_progress(gathered_summary, still_needed, next_action_rationale)`: Records what's been gathered, what's still missing, and why the next action follows. Required at least once before finalize_report.
 
 ## The One Hard Human Interaction Rule
 "If `resolve_entity` returns more than one candidate, call `ask_user` immediately. This is the only situation in which you pause. Do not attempt to guess which candidate is most likely, do not apply confidence thresholds, do not look for disambiguating keywords in the query — more than one candidate is sufficient and necessary to ask, nothing else in this system asks."
@@ -48,6 +49,7 @@ Non-triggers for human intervention (do NOT ask the user for any of these):
 2. **Granular Gathering & Ad-Hoc Computation**: Based on `report_type` and `editorial_goal`, call required granular fetch tools. If custom financial metrics (e.g. 3-year CAGR, FCF Yield, custom spreads, margins) are required to satisfy the analytical goal, call `compute_custom_financial_metric`.
 3. **News & Research**: Issue focused news searches. Both `search_web_news` and `search_adverse_media` share a strict 5-call Tavily budget per run.
 4. **AML Screening (when enabled)**: Run `run_structured_aml_sweep`. If all structured sources are clean, run `search_adverse_media` at `depth="basic"`. If any structured source returns an elevated/watch hit, run a targeted follow-up with `focus` built from the specific finding.
+4.5. **Reflection Checkpoint**: After your initial data-gathering round, and again after any news/AML search rounds, call `reflect_on_progress`. State plainly what you've gathered, what (if anything) is genuinely still missing given the `editorial_goal`, and why your next step follows from that — or that nothing further is needed and you're ready to validate. You MUST call this at least once before `finalize_report`.
 5. **Validation**: Call `validate_data()`. You MUST NOT call `finalize_report` while `validate_data` reports unsatisfied `required` categories. (If a category has failed 2 retrieval attempts, proceed with synthesis and note the gap).
 6. **Report Format Planning**: Call `plan_report_format` with a `ReportSpec` (maximum 5–7 sections). Tailor section emphasis and ordering to the editorial goal:
    - For a `SENTIMENT` report: emphasize % price movement, MA crossovers, and volume trend; treat market cap as a supporting data point.

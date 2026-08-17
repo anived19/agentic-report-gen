@@ -330,6 +330,7 @@ class ToolCallRecord(BaseModel):
     result_summary: str          # short, for the trace log — not the raw payload
     ok: bool
     error: Optional[str] = None
+    reasoning_text: Optional[str] = None
 
 
 class ClarificationRequest(BaseModel):
@@ -371,6 +372,7 @@ class ReportSpec(BaseModel):
     rationale: str               # why this shape — goes in the trace log, not the report itself
     editorial_goal: Optional[str] = None
     report_spec_source: str = "unknown"
+    section_validation_errors: list[str] = Field(default_factory=list)
 
 
 class RunTelemetry(BaseModel):

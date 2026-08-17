@@ -107,6 +107,9 @@ def finalize_report(*args, **kwargs) -> dict:
 def compute_custom_financial_metric(*args, **kwargs) -> dict:
     return {"status": "computed"}
 
+def reflect_on_progress(*args, **kwargs) -> dict:
+    return {"status": "reflected"}
+
 
 class MasterOrchestrator:
     def __init__(
@@ -154,6 +157,7 @@ class MasterOrchestrator:
             "search_web_news",
             "run_structured_aml_sweep",
             "search_adverse_media",
+            "reflect_on_progress",
             "validate_data",
             "plan_report_format",
             "finalize_report",
@@ -246,13 +250,15 @@ class MasterOrchestrator:
         rationale = args.get("rationale", "")
         raw_sections = args.get("sections", [])
         sections = []
+        section_validation_errors: list[str] = []
 
         if raw_sections:
-            for s in raw_sections:
+            for idx, s in enumerate(raw_sections, 1):
                 try:
                     sections.append(SectionSpec.model_validate(s))
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Failed to validate section %d (%r): %s", idx, s, exc)
+                    section_validation_errors.append(f"Section {idx} ({s}): {exc}")
 
         # Bounding sections: cap at maximum 7 active sections (Refinement #4)
         if sections:
@@ -328,6 +334,7 @@ class MasterOrchestrator:
             rationale=rationale,
             editorial_goal=self.state.editorial_goal,
             report_spec_source=report_spec_source,
+            section_validation_errors=section_validation_errors,
         )
         self.state.report_spec = spec
         return spec
@@ -553,25 +560,64 @@ class MasterOrchestrator:
             return v.model_dump(), summary, True, None
 
         elif tool_name == "plan_report_format":
-            if not args.get("sections") and self._format_retries < 2:
+            raw_sections = args.get("sections", [])
+            valid_sections = []
+            validation_errors = []
+            if raw_sections:
+                for idx, s in enumerate(raw_sections, 1):
+                    try:
+                        valid_sections.append(SectionSpec.model_validate(s))
+                    except Exception as exc:
+                        logger.warning("Failed to validate section %d (%r): %s", idx, s, exc)
+                        validation_errors.append(f"Section {idx} ({s}): {exc}")
+
+            if (not raw_sections or not valid_sections) and self._format_retries < 2:
                 self._format_retries += 1
-                err = (
-                    "Error: 'sections' cannot be empty. You must explicitly design the "
-                    "report sections and emphasize specific data points you retrieved "
-                    "(e.g. the exact price movement, AML flags, or custom YoY growth metrics). "
-                    "Retry plan_report_format with a fully populated 'sections' list."
-                )
+                if not raw_sections:
+                    err = (
+                        "Error: 'sections' cannot be empty. You must explicitly design the "
+                        "report sections and emphasize specific data points you retrieved "
+                        "(e.g. the exact price movement, AML flags, or custom YoY growth metrics). "
+                        "Retry plan_report_format with a fully populated 'sections' list."
+                    )
+                else:
+                    err = (
+                        f"Error: Received {len(raw_sections)} section(s), but none were valid SectionSpec objects. "
+                        f"Validation errors: {'; '.join(validation_errors)}. "
+                        "Each section requires 'key' (e.g. 'executive_summary', 'financial_highlights', "
+                        "'fundamentals_deep_dive', 'technicals', 'valuation_analysis', 'sentiment_news', "
+                        "'risk_factors', 'scenario_outlook', or custom snake_case), 'include' (bool, default True), "
+                        "'order' (int), and 'emphasis' (str). "
+                        "Retry plan_report_format with valid section specifications."
+                    )
                 return {}, err, False, err
 
             spec = self._execute_plan_report_format(args)
             summary = f"Planned report format ({spec.report_spec_source}): {len(spec.sections)} sections. Rationale: {spec.rationale[:60]}..."
             return spec.model_dump(), summary, True, None
 
+        elif tool_name == "reflect_on_progress":
+            gathered_summary = args.get("gathered_summary", "")
+            still_needed = args.get("still_needed", [])
+            next_action_rationale = args.get("next_action_rationale", "")
+            summary = (
+                f"Reflection recorded: {len(still_needed)} gap(s) noted"
+                + (f" — {still_needed}" if still_needed else " — none, ready to finalize")
+            )
+            return {"acknowledged": True}, summary, True, None
+
         elif tool_name == "finalize_report":
             v = self._execute_validate_data()
             if not v.satisfied:
                 err = f"Cannot finalize: missing required categories {v.missing}"
                 return {"ok": False, "missing": v.missing}, err, False, err
+            if self.category_attempts.get("reflect_on_progress", 0) == 0:
+                err = (
+                    "Cannot finalize: call reflect_on_progress first, summarizing "
+                    "what was gathered and confirming nothing further is needed "
+                    "relative to the editorial goal."
+                )
+                return {"ok": False}, err, False, err
             if not self.state.report_spec:
                 self._execute_plan_report_format({})
             self.state.status = AgentStatus.DONE
@@ -605,7 +651,7 @@ class MasterOrchestrator:
             f"3. Fetch required market data categories for the {self.state.report_type.value} report type.\n"
             f"4. If ad-hoc calculations (CAGR, FCF Yield, custom spreads, margins) are required to satisfy the editorial goal, call compute_custom_financial_metric.\n"
             f"5. Run news and adverse media searches within the shared 5-call Tavily budget.\n"
-            f"6. Call validate_data(), then plan_report_format(), then finalize_report()."
+            f"6. Call reflect_on_progress(), then validate_data(), then plan_report_format(), then finalize_report()."
         )
 
         contents: list[types.Content] = [
@@ -633,6 +679,17 @@ class MasterOrchestrator:
 
             if response.candidates and response.candidates[0].content:
                 contents.append(response.candidates[0].content)
+
+            # Extract any non-function-call text parts (reasoning emitted by Gemini)
+            reasoning_text: Optional[str] = None
+            if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
+                reasoning_text = " ".join(
+                    p.text for p in response.candidates[0].content.parts
+                    if getattr(p, "text", None)
+                ).strip() or None
+
+            if reasoning_text:
+                logger.info("[thought turn %d] %s", self.state.turn, reasoning_text)
 
             calls = response.function_calls or []
             if not calls:
@@ -663,6 +720,7 @@ class MasterOrchestrator:
                     result_summary=summary,
                     ok=ok,
                     error=error,
+                    reasoning_text=reasoning_text,
                 )
                 self.state.tool_log.append(record)
                 logger.info("[act] %s(%s) -> ok=%s: %s", call.name, args, ok, summary)

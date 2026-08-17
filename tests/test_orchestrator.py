@@ -422,3 +422,109 @@ def test_dispatch_plan_report_format_agent_success():
     assert orch.state.report_spec.report_spec_source == "agent"
     assert orch._format_retries == 0
     assert "agent" in summary
+
+
+def test_dispatch_plan_report_format_malformed_sections_retry():
+    """Verify that plan_report_format rejects malformed sections and records validation errors."""
+    orch = MasterOrchestrator(
+        user_query="valuation of TCS",
+        report_type=ReportType.VALUATION,
+    )
+    orch.state.ticker = "TCS.NS"
+
+    malformed_sections = [
+        {"title": "Section Missing Key", "order": 1},  # missing 'key'
+        {"key": 12345, "title": "Invalid key type", "order": "invalid_order"},  # invalid order int
+    ]
+
+    # Attempt 1: malformed sections -> rejected with detailed validation errors
+    res1, summary1, ok1, err1 = orch._dispatch_tool("plan_report_format", {"sections": malformed_sections})
+    assert ok1 is False
+    assert orch._format_retries == 1
+    assert "none were valid SectionSpec objects" in err1
+    assert "Validation errors:" in err1
+
+    # Attempt 2: still malformed -> rejected again
+    res2, summary2, ok2, err2 = orch._dispatch_tool("plan_report_format", {"sections": malformed_sections})
+    assert ok2 is False
+    assert orch._format_retries == 2
+
+    # Attempt 3: retry ceiling reached -> fallback used and section_validation_errors recorded
+    res3, summary3, ok3, err3 = orch._dispatch_tool("plan_report_format", {"sections": malformed_sections})
+    assert ok3 is True
+    assert res3["report_spec_source"] == "fallback"
+    assert orch.state.report_spec.report_spec_source == "fallback"
+    assert len(orch.state.report_spec.section_validation_errors) > 0
+
+
+def test_tool_call_record_reasoning_text():
+    """Verify that ToolCallRecord accepts and stores reasoning_text."""
+    from schemas import ToolCallRecord
+    rec = ToolCallRecord(
+        turn=1,
+        tool_name="get_price_snapshot",
+        arguments={"ticker": "TCS.NS"},
+        result_summary="Fetched price",
+        ok=True,
+        reasoning_text="Model reasoned that it needs current price snapshot first.",
+    )
+    assert rec.reasoning_text == "Model reasoned that it needs current price snapshot first."
+    data = rec.model_dump()
+    assert data["reasoning_text"] == "Model reasoned that it needs current price snapshot first."
+
+
+def test_reflect_on_progress_dispatch_and_finalize_gating():
+    """Verify reflect_on_progress dispatches cleanly and gates finalize_report."""
+    orch = MasterOrchestrator(
+        user_query="valuation of TCS",
+        report_type=ReportType.VALUATION,
+    )
+    orch.state.ticker = "TCS.NS"
+    orch.state.market_data = {
+        "current_price": 3800.0,
+        "market_cap": 14000000000000.0,
+        "pe_ratio": 28.5,
+        "pb_ratio": 12.1,
+        "ps_ratio": 6.8,
+        "eps_ttm": 133.0,
+    }
+    orch.search_queries_used = ["TCS valuation analyst targets"]
+
+    # 1. Attempt finalize_report before reflection -> gated and rejected
+    res_fin1, summary_fin1, ok_fin1, err_fin1 = orch._dispatch_tool("finalize_report", {})
+    assert ok_fin1 is False
+    assert "call reflect_on_progress first" in err_fin1
+
+    # 2. Dispatch reflect_on_progress with gaps
+    res_ref1, summary_ref1, ok_ref1, err_ref1 = orch._dispatch_tool(
+        "reflect_on_progress",
+        {
+            "gathered_summary": "Fetched price snapshot and valuation multiples.",
+            "still_needed": ["news_searches"],
+            "next_action_rationale": "Need latest news on analyst price targets.",
+        },
+    )
+    assert ok_ref1 is True
+    assert err_ref1 is None
+    assert "1 gap(s) noted" in summary_ref1
+    assert "news_searches" in summary_ref1
+
+    # 3. Dispatch reflect_on_progress with no gaps
+    res_ref2, summary_ref2, ok_ref2, err_ref2 = orch._dispatch_tool(
+        "reflect_on_progress",
+        {
+            "gathered_summary": "Fetched price snapshot, multiples, and sentiment analyst targets.",
+            "still_needed": [],
+            "next_action_rationale": "All required data in place, ready to finalize report.",
+        },
+    )
+    assert ok_ref2 is True
+    assert "none, ready to finalize" in summary_ref2
+
+    # 4. Attempt finalize_report after reflection -> succeeds
+    res_fin2, summary_fin2, ok_fin2, err_fin2 = orch._dispatch_tool("finalize_report", {})
+    assert ok_fin2 is True
+    assert err_fin2 is None
+    assert orch.state.status == AgentStatus.DONE
+
+
