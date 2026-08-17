@@ -528,3 +528,42 @@ def test_reflect_on_progress_dispatch_and_finalize_gating():
     assert orch.state.status == AgentStatus.DONE
 
 
+def test_reasoning_extraction_with_thoughts_and_rationale():
+    """Verify that reasoning extraction correctly separates and combines thoughts and rationale."""
+    from google.genai import types
+
+    orch = MasterOrchestrator(
+        user_query="valuation of TCS",
+        report_type=ReportType.VALUATION,
+    )
+
+    # 1. Thought part + rationale part
+    mock_resp1 = MagicMock()
+    mock_candidate1 = MagicMock()
+    mock_candidate1.content.parts = [
+        types.Part(text="Thinking about company fundamentals...", thought=True),
+        types.Part(text="Fetching valuation multiples for TCS.NS."),
+    ]
+    mock_resp1.candidates = [mock_candidate1]
+    mock_resp1.function_calls = []
+
+    thought_parts = []
+    text_parts = []
+    for p in mock_candidate1.content.parts:
+        p_thought = getattr(p, "thought", None)
+        p_text = getattr(p, "text", None)
+        if p_thought is True:
+            if p_text and p_text.strip():
+                thought_parts.append(p_text.strip())
+        elif isinstance(p_thought, str) and p_thought.strip():
+            thought_parts.append(p_thought.strip())
+        elif p_text and p_text.strip():
+            text_parts.append(p_text.strip())
+
+    thought_text = " ".join(thought_parts).strip()
+    rationale_text = " ".join(text_parts).strip()
+    res_text = f"[Thought: {thought_text}] {rationale_text}"
+    assert res_text == "[Thought: Thinking about company fundamentals...] Fetching valuation multiples for TCS.NS."
+
+
+

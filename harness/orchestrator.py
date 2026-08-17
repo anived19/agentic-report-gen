@@ -637,7 +637,22 @@ class MasterOrchestrator:
         # Expose all available skills to Gemini
         declarations = [s.declaration for s in self.skills.values()]
         tools = [types.Tool(function_declarations=declarations)]
-        loop_config = types.GenerateContentConfig(system_instruction=system_prompt, tools=tools)
+
+        # Configure thinking config if supported
+        thinking_config = None
+        try:
+            thinking_config = types.ThinkingConfig(
+                include_thoughts=True,
+                thinking_budget=1024,
+            )
+        except Exception as exc:
+            logger.warning("Could not initialize ThinkingConfig: %s", exc)
+
+        loop_config = types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            tools=tools,
+            thinking_config=thinking_config,
+        )
 
         user_initial_text = (
             f"User request: {self.state.user_query}\n"
@@ -673,20 +688,56 @@ class MasterOrchestrator:
                     config=loop_config,
                 )
             except Exception as exc:
-                logger.error("Gemini call failed during turn %d: %s", self.state.turn, exc)
-                self.state.status = AgentStatus.FAILED
-                break
+                if loop_config.thinking_config is not None:
+                    logger.warning("Gemini call failed with ThinkingConfig (%s); retrying without thinking_config...", exc)
+                    loop_config.thinking_config = None
+                    try:
+                        response = generate_with_retry(
+                            client,
+                            model=settings.gemini_model,
+                            contents=contents,
+                            config=loop_config,
+                        )
+                    except Exception as retry_exc:
+                        logger.error("Gemini call failed during turn %d: %s", self.state.turn, retry_exc)
+                        self.state.status = AgentStatus.FAILED
+                        break
+                else:
+                    logger.error("Gemini call failed during turn %d: %s", self.state.turn, exc)
+                    self.state.status = AgentStatus.FAILED
+                    break
 
             if response.candidates and response.candidates[0].content:
                 contents.append(response.candidates[0].content)
 
-            # Extract any non-function-call text parts (reasoning emitted by Gemini)
-            reasoning_text: Optional[str] = None
+            # Extract reasoning text: separate thought parts and plain-text rationale
+            thought_parts: list[str] = []
+            text_parts: list[str] = []
+
             if response.candidates and response.candidates[0].content and response.candidates[0].content.parts:
-                reasoning_text = " ".join(
-                    p.text for p in response.candidates[0].content.parts
-                    if getattr(p, "text", None)
-                ).strip() or None
+                for p in response.candidates[0].content.parts:
+                    p_thought = getattr(p, "thought", None)
+                    p_text = getattr(p, "text", None)
+
+                    if p_thought is True:
+                        if p_text and p_text.strip():
+                            thought_parts.append(p_text.strip())
+                    elif isinstance(p_thought, str) and p_thought.strip():
+                        thought_parts.append(p_thought.strip())
+                    elif p_text and p_text.strip():
+                        text_parts.append(p_text.strip())
+
+            thought_text = " ".join(thought_parts).strip()
+            rationale_text = " ".join(text_parts).strip()
+
+            if thought_text and rationale_text:
+                reasoning_text = f"[Thought: {thought_text}] {rationale_text}"
+            elif thought_text:
+                reasoning_text = f"[Thought: {thought_text}]"
+            elif rationale_text:
+                reasoning_text = rationale_text
+            else:
+                reasoning_text = None
 
             if reasoning_text:
                 logger.info("[thought turn %d] %s", self.state.turn, reasoning_text)
