@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import importlib
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Callable
 
 import yaml
@@ -118,8 +117,3 @@ def load_skill(name: str) -> SkillBundle:
         tool_function_path=frontmatter["tool_function"],
         description_body=body,
     )
-
-
-def load_skills(names: list[str]) -> list[SkillBundle]:
-    """Convenience: load several skills by name from the skills/ directory."""
-    return [load_skill(name) for name in names]

@@ -13,7 +13,7 @@ import argparse
 import logging
 import sys
 
-from harness.intake import detect_report_type, extract_company_reference, extract_editorial_goal, extract_intake_priors
+from harness.intake import detect_report_type, extract_editorial_goal, extract_intake_priors
 from harness.orchestrator import run_orchestrator
 from tools.pdf_tools import compile_pdf
 

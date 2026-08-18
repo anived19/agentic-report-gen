@@ -99,8 +99,6 @@ flowchart TD
 |---|---|
 | `agents/orchestrator.md` | System instruction for the Master Orchestrator |
 | `agents/chief_editor.md` | System instruction for the Chief Editor synthesis call |
-| `agents/research_analyst.md` | System instruction for the Research extraction call |
-| `agents/aml_screener.md` | System instruction for adverse media screening |
 
 ### Runtime Skills (`skills/`)
 
@@ -269,7 +267,7 @@ The intake classifier (`harness/intake.py`) is a single-shot LLM call. It works 
 3. Add an instruction builder to `_SECTION_INSTRUCTION_MAP` in `harness/synthesis.py`.
 
 ### Add a new AML screening source
-Follow the pattern in `.agents/skills/aml-abc-screening/SKILL.md` — implement a function in `tools/aml_tools.py`, add it to `_STRUCTURED_SCREENERS` in `harness/aml_agent.py`.
+Follow the pattern in `.agents/skills/aml-abc-screening/SKILL.md` — implement a function in `tools/aml_tools.py`, add it to `run_structured_aml_sweep` in `tools/aml_tools.py`.
 
 ### Add a Layer 3
 Follow the layering pattern:

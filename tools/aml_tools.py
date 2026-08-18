@@ -26,7 +26,7 @@ import logging
 import os
 import re
 import time
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 from typing import Any, Optional
 
@@ -700,12 +700,6 @@ def _filter_adverse_media_with_llm(entity_name: str, raw_results: list[dict]) ->
                     source_url=c["url"],
                 ))
         return fallback_findings
-
-
-def search_aml_adverse_media(query: str, max_results: int = 5) -> list[dict]:
-    """Search for adverse media / regulatory findings related to an AML/ABC query."""
-    from tools.search_tools import search_web_news
-    return search_web_news(query=query, max_results=max_results)
 
 
 def search_adverse_media(

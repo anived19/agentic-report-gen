@@ -1,12 +1,12 @@
 from schemas import AMLFinding, AMLSeverity
 from harness.synthesis import _finding_sort_key
 from tools.aml_tools import (
+    _classify_severity,
     _name_matches,
     _normalize,
     get_fatf_risk,
     get_jurisdictional_risk,
 )
-from harness.aml_agent_loop import _classify_severity
 
 
 def test_normalize():
@@ -138,7 +138,7 @@ def test_url_cleaning_and_noise_filtering():
 
 
 def test_screener_clean_status_on_failure(monkeypatch):
-    from tools.aml_tools import screen_opensanctions, screen_ofac_sdn, screen_world_bank_debarred
+    from tools.aml_tools import screen_ofac_sdn, screen_world_bank_debarred
     
     # Force exceptions
     def mock_fail(*args, **kwargs):

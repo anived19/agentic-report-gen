@@ -39,30 +39,25 @@ config) and should not be globally available.
 main.py --aml flag
     │
     ▼
-harness/aml_agent.py  run_aml_screening()
+harness/orchestrator.py  MasterOrchestrator
     │
-    ├── Phase 1: Structured sources (deterministic loop)
-    │     tools/aml_tools.py:
-    │       screen_ofac_sdn()          → OFAC SDN REST API
-    │       screen_opensanctions()     → OpenSanctions search API
+    ├── Structured sources & jurisdictional context:
+    │     skills/run_structured_aml_sweep.md
+    │     → tools/aml_tools.py: run_structured_aml_sweep()
+    │       screen_ofac_sdn()            → OFAC SDN REST API
+    │       screen_opensanctions()       → OpenSanctions search API
     │       screen_world_bank_debarred() → World Bank IVP JSON API
-    │       screen_un_sanctions()      → UN Consolidated List XML (cached)
-    │       screen_eu_sanctions()      → EU Financial Sanctions XML (cached)
-    │       screen_sec_fcpa()          → SEC EDGAR full-text search
+    │       screen_un_sanctions()        → UN Consolidated List XML (cached)
+    │       screen_eu_sanctions()        → EU Financial Sanctions XML (cached)
+    │       screen_sec_fcpa()            → SEC EDGAR full-text search
+    │       get_jurisdictional_risk()    → TI CPI 2023 snapshot
+    │       get_fatf_risk()             → FATF grey/black list snapshot
     │
-    ├── Phase 2: Adverse media (bounded Tavily loop)
-    │     harness/aml_agent_loop.py  run_aml_adverse_media_agent()
-    │       LLM formulates queries → screen_entity_aml tool
-    │       → skills/screen_entity_aml.md
-    │       → tools/aml_tools.py:search_aml_adverse_media()
-    │       → tools/search_tools.py:search_web_news()  [existing tool]
-    │     Keyword-based severity classification (no LLM paraphrasing)
-    │
-    ├── Phase 3: Jurisdictional context (deterministic)
-    │     tools/aml_tools.py:
-    │       get_jurisdictional_risk() → TI CPI 2023 hardcoded snapshot
-    │       get_fatf_risk()           → FATF grey/black list snapshot (Oct 2024)
-    │     Country inferred from ticker suffix (.NS/.BO = India) or currency
+    ├── Adverse media:
+    │     skills/search_adverse_media.md
+    │     → tools/aml_tools.py: search_adverse_media()
+    │       → tools/search_tools.py: search_web_news()
+    │       → tools/aml_tools.py: _filter_adverse_media_with_llm()
     │
     ▼
 schemas.py  AMLScreeningResult  →  harness/synthesis.py  render_aml_markdown()
@@ -126,11 +121,7 @@ Severity is classified by keyword presence in the retrieved content:
    def screen_new_source(entity_name: str) -> AMLFinding:
        # fetch, match, return AMLFinding(...)
    ```
-2. **Add it to `_STRUCTURED_SCREENERS`** in `harness/aml_agent.py`:
-   ```python
-   from tools.aml_tools import screen_new_source
-   _STRUCTURED_SCREENERS = [..., screen_new_source]
-   ```
+2. **Add it to `screeners` list** in `tools/aml_tools.py:run_structured_aml_sweep()`.
 3. **Document it** in the source reference table above and in `ARCHITECTURE.md`.
 4. **Update `render_config.yaml`** section_specs if the source warrants a config entry.
 
@@ -140,10 +131,9 @@ Severity is classified by keyword presence in the retrieved content:
 
 | File | Role |
 |---|---|
-| `harness/aml_agent.py` | Orchestrator: entity derivation + phase coordination |
-| `harness/aml_agent_loop.py` | Bounded Tavily loop for adverse media (Phase 2) |
-| `tools/aml_tools.py` | All structured screening functions + TI CPI / FATF snapshots |
-| `agents/aml_screener.md` | System prompt for the adverse media search agent |
-| `skills/screen_entity_aml.md` | Gemini tool-calling skill spec for the adverse media search |
+| `harness/orchestrator.py` | Master Orchestrator: runs ReAct loop, calls AML tools dynamically |
+| `tools/aml_tools.py` | All structured screening functions + TI CPI / FATF snapshots + search_adverse_media |
+| `skills/run_structured_aml_sweep.md` | Skill spec for parallel structured compliance sweep |
+| `skills/search_adverse_media.md` | Skill spec for focused adverse media screening |
 | `schemas.py` | `AMLFinding`, `AMLSeverity`, `AMLScreeningResult` |
 | `harness/synthesis.py` | `render_aml_markdown()` — deterministic Markdown formatter |

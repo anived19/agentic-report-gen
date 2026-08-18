@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import ast
 import logging
-import math
 from datetime import date
 from typing import Any
 
@@ -70,6 +69,10 @@ _INFO_FIELDS: dict[str, tuple[str, ...]] = {
 }
 
 _TRADING_DAYS_PER_MONTH = 21
+
+
+def _rnd(val: Any, decimals: int = 2) -> float | None:
+    return round(float(val), decimals) if val is not None else None
 
 
 # ---------------------------------------------------------------------------
@@ -495,9 +498,6 @@ def get_valuation_multiples(ticker: str) -> dict[str, Any]:
     if revenue_ttm is not None:
         revenue_ttm = round(float(revenue_ttm), 2)
 
-    def _rnd(val, decimals=2):
-        return round(float(val), decimals) if val is not None else None
-
     pe = _rnd(info.get("trailingPE"))
     fpe = _rnd(info.get("forwardPE"))
     pb = _rnd(info.get("priceToBook"))
@@ -538,9 +538,6 @@ def get_fundamentals(ticker: str) -> dict[str, Any]:
         info = t.info or {}
     except Exception as exc:
         logger.warning("get_fundamentals .info failed for %s: %s", ticker, exc)
-
-    def _rnd(val, decimals=2):
-        return round(float(val), decimals) if val is not None else None
 
     eps = _rnd(info.get("trailingEps"))
     dte = _rnd(info.get("debtToEquity"))
@@ -1190,17 +1187,4 @@ def compute_custom_financial_metric(
         "chronological_valid": chronological_valid,
         "notes": f"Computed via calculation sandbox ({clean_expr})",
     }
-
-
-@retry_on_transient_error(max_attempts=3)
-def fetch_yfinance_data(ticker: str) -> MarketMetrics:
-    """Fetch complete MarketMetrics by executing granular fetchers."""
-    merged: dict[str, Any] = {}
-    merged.update(get_price_snapshot(ticker))
-    merged.update(get_valuation_multiples(ticker))
-    merged.update(get_fundamentals(ticker))
-    merged.update(get_technicals(ticker))
-    merged.update(get_ownership(ticker))
-    merged["quarterly_financials"] = get_quarterly_financials(ticker)
-    return assemble_market_metrics(ticker, merged)
 

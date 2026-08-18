@@ -30,7 +30,6 @@ from schemas import (
     AMLSeverity,
     ClarificationRequest,
     FinalReport,
-    MarketMetrics,
     ReportSpec,
     ReportType,
     RunTelemetry,

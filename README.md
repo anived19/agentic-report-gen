@@ -58,9 +58,8 @@ Output PDF: `outputs/TICKER_YYYY-MM-DD.pdf`
 ## Extending
 
 - **New report section**: edit `render_config.yaml` (add the key to the section list), add a heading to `_SECTION_HEADINGS` and an instruction builder to `_SECTION_INSTRUCTION_MAP` in `harness/synthesis.py`. See `.agents/skills/pdf-report-generator/SKILL.md`.
-- **New AML screening source**: implement a function in `tools/aml_tools.py`, add it to `_STRUCTURED_SCREENERS` in `harness/aml_agent.py`. See `.agents/skills/aml-abc-screening/SKILL.md`.
-- **New static ticker mappings**: add to `_STATIC_MAP` in `tools/ticker_resolver.py`.
+- **New AML screening source**: implement a function in `tools/aml_tools.py`, add it to `run_structured_aml_sweep` in `tools/aml_tools.py`. See `.agents/skills/aml-abc-screening/SKILL.md`.
+- **New static ticker mappings**: add to `_STATIC_MAP` in `tools/ticker_resolver.py` or `tools/conglomerate_map.yaml`.
 - **Change the model**: set `GEMINI_MODEL` in `.env`.
-- **Change report tone/structure**: edit `agents/chief_editor.md` — no code changes needed.
-- **Change the research strategy**: edit `agents/research_analyst.md`.
+- **Change report tone/structure**: edit `agents/chief_editor.md` or `agents/orchestrator.md` — no code changes needed.
 - **Change section ordering**: edit `render_config.yaml` — no code changes needed.
